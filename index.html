@@ -315,7 +315,7 @@ header{
 #loading-msg{color:#e2e8f0;font-size:15px;font-weight:600;margin:0;}
 
 /* ══ 업로드 카드 ══ */
-#view-upload{display:flex;align-items:center;justify-content:center;min-height:80vh;}
+#view-upload{display:none;align-items:center;justify-content:center;min-height:80vh;}
 .upload-card{
     background:var(--panel);border-radius:20px;padding:48px 32px;
     text-align:center;max-width:400px;width:calc(100% - 32px);
@@ -410,11 +410,10 @@ header{
         <span class="dept-topbar-title" id="lbl-dept-name">부서</span>
         <button class="dept-shortage-btn ok" id="dept-shortage-btn" onclick="openDeptShortageModal()">✅ 재고 정상</button>
     </div>
-    <div class="map-view-container">
-        <div class="map-hint">👆 한 손가락: 이동 &nbsp;|&nbsp; ✌️ 두 손가락: 회전·줌 &nbsp;|&nbsp; 탭: 장비 선택</div>
-        <div class="twin-3d-scene" id="3d-scene-stage">
-            <div class="twin-3d-grid" id="dynamic-factory-map"></div>
-        </div>
+    <div id="equip-scroll-container" style="
+        flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;
+        background:var(--bg);">
+        <div id="dynamic-factory-map"></div>
     </div>
 </div>
 
@@ -961,7 +960,17 @@ function closeSummaryModal(){
 }
 function showView(id, push=true){
     currentViewId=id;
-    // parts/summary는 fullscreen 모달로 처리
+    if(id==='loading'){
+        // 로딩 중엔 모든 뷰 숨김
+        document.querySelectorAll('.view').forEach(v=>{v.classList.remove('active');v.style.display='none';});
+        return;
+    }
+    if(id==='upload'){
+        document.querySelectorAll('.view').forEach(v=>{v.classList.remove('active');v.style.display='none';});
+        const u=document.getElementById('view-upload');
+        if(u){u.style.display='flex';}
+        return;
+    }
     if(id==='parts'){
         document.getElementById('view-parts').classList.add('active-modal');
         if(push) history.pushState({viewId:id},'','');
@@ -972,7 +981,7 @@ function showView(id, push=true){
         if(push) history.pushState({viewId:id},'','');
         return;
     }
-    document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+    document.querySelectorAll('.view').forEach(v=>{v.classList.remove('active');v.style.display='';});
     document.getElementById('view-'+id)?.classList.add('active');
     if(push) history.pushState({viewId:id},'','');
 }
@@ -1144,15 +1153,143 @@ function findSheet(key){
 
 /* ══ 부서 열기 ══ */
 function openDept(deptName){
-    resetCam();
     currentDeptName=deptName;
     const sName=deptName==='M/C'?'MC':deptName;
-    document.getElementById('lbl-dept-name').innerText=`🛸 ${deptName}`;
+    document.getElementById('lbl-dept-name').innerText=deptName;
     const sheet=excelWorkbook.Sheets[sName];
     if(!sheet||!sheet['!ref']){alert(`[${sName}] 시트를 찾지 못했습니다.`);return;}
-    render3DMap(sheet,26);
+    render2DMap(sheet);
     showView('dept');
-    setTimeout(()=>{syncBillboard();markShortageCubes();updateDeptShortageBtn();autoFitZoom();},80);
+    setTimeout(()=>{mark2DShortageCubes();updateDeptShortageBtn();},80);
+}
+
+
+/* ══ 2D 장비 카드 렌더링 ══ */
+function render2DMap(sheet){
+    const mapZone=document.getElementById('dynamic-factory-map');
+    mapZone.innerHTML='';
+    mapZone.style.gridTemplateColumns='';
+    mapZone.style.gap='';
+
+    const range=XLSX.utils.decode_range(sheet['!ref']);
+    const maxR=range.e.r, maxC=Math.min(range.e.c,51);
+    const mapStartCol=26;
+    if(mapStartCol>maxC){
+        mapZone.innerHTML='<p style="color:var(--muted);text-align:center;padding:40px;">배치 데이터 없음</p>';
+        return;
+    }
+
+    // 셀 데이터 수집
+    const items=[]; // {val, linkSheet, isHeader}
+    const ROOM_KW=['Press','Sinter','Sand','합금','금형','연삭','코팅','가공','구역','M/C','Robot','QA','IMC'];
+    const isRoomHeader=val=>ROOM_KW.some(k=>val===k||(val.startsWith(k)&&/^[\s\d_\-\/]*$/.test(val.slice(k.length))));
+
+    // 병합셀 처리
+    const merged={};
+    if(sheet['!merges']){
+        sheet['!merges'].forEach(m=>{
+            const oc=sheet[XLSX.utils.encode_cell({r:m.s.r,c:m.s.c})];
+            const txt=oc?String(oc.v??'').trim():'';
+            if(txt) merged[`${m.s.r}_${m.s.c}`]={txt, er:m.e.r, ec:m.e.c};
+            for(let r=m.s.r;r<=m.e.r;r++)
+                for(let c=m.s.c;c<=m.e.c;c++)
+                    if(!(r===m.s.r&&c===m.s.c)) merged[`${r}_${c}`]={skip:true};
+        });
+    }
+
+    const seen=new Set();
+    for(let r=0;r<=maxR;r++){
+        for(let c=mapStartCol;c<=maxC;c++){
+            const mk=`${r}_${c}`;
+            if(merged[mk]?.skip) continue;
+            const val=merged[mk]?.txt||(sheet[XLSX.utils.encode_cell({r,c})]?String(sheet[XLSX.utils.encode_cell({r,c})].v??'').trim():'');
+            if(!val) continue;
+            if(seen.has(val)) continue;
+            seen.add(val);
+            const linkSheet=HYPERLINK_MAP[val]||val;
+            items.push({val, linkSheet, isHeader:isRoomHeader(val)});
+        }
+    }
+
+    if(!items.length){
+        mapZone.innerHTML='<p style="color:var(--muted);text-align:center;padding:40px;">장비 데이터 없음</p>';
+        return;
+    }
+
+    // 2D 카드 렌더링
+    const HPAL=[
+        {bg:'rgba(219,234,254,0.8)',border:'#93c5fd',txt:'#1d4ed8'},
+        {bg:'rgba(254,215,170,0.8)',border:'#fdba74',txt:'#c2410c'},
+        {bg:'rgba(187,247,208,0.8)',border:'#86efac',txt:'#15803d'},
+        {bg:'rgba(233,213,255,0.8)',border:'#d8b4fe',txt:'#7e22ce'},
+        {bg:'rgba(207,250,254,0.8)',border:'#67e8f9',txt:'#0e7490'},
+        {bg:'rgba(254,249,195,0.8)',border:'#fcd34d',txt:'#b45309'},
+        {bg:'rgba(254,202,202,0.8)',border:'#fca5a5',txt:'#b91c1c'},
+        {bg:'rgba(209,250,229,0.8)',border:'#6ee7b7',txt:'#065f46'},
+    ];
+    let palIdx=0;
+    let html='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px;padding:12px;">';
+    items.forEach(({val,linkSheet,isHeader})=>{
+        if(isHeader){
+            const p=HPAL[palIdx++%HPAL.length];
+            html+=`<div style="grid-column:1/-1;padding:8px 14px;
+                background:${p.bg};border:2px solid ${p.border};border-radius:10px;
+                font-size:13px;font-weight:900;color:${p.txt};letter-spacing:1px;">
+                ${escapeHtml(val)}</div>`;
+        } else {
+            const colors=getDynamicCubeColors(val);
+            html+=`<div class="equip-card" data-val="${escapeHtml(val)}" data-sheet="${escapeHtml(linkSheet)}"
+                style="background:${colors.top};border:2px solid ${colors.front};border-radius:12px;
+                padding:14px 8px;text-align:center;cursor:pointer;
+                font-size:12px;font-weight:700;color:var(--text);
+                transition:transform 0.12s,box-shadow 0.12s;
+                box-shadow:0 2px 6px rgba(0,0,0,0.1);
+                word-break:break-word;line-height:1.3;
+                -webkit-tap-highlight-color:transparent;">
+                ${escapeHtml(val)}</div>`;
+        }
+    });
+    html+='</div>';
+    mapZone.innerHTML=html;
+
+    // 클릭 이벤트
+    if(mapZone._cardClickHandler) mapZone.removeEventListener('click',mapZone._cardClickHandler);
+    mapZone._cardClickHandler=e=>{
+        const card=e.target.closest('.equip-card');
+        if(card){
+            openPartsModal(card.getAttribute('data-val'), card.getAttribute('data-sheet'));
+        }
+    };
+    mapZone.addEventListener('click',mapZone._cardClickHandler);
+
+    // 터치 피드백
+    mapZone.addEventListener('touchstart',e=>{
+        const card=e.target.closest('.equip-card');
+        if(card) card.style.transform='scale(0.94)';
+    },{passive:true});
+    mapZone.addEventListener('touchend',e=>{
+        const card=e.target.closest('.equip-card');
+        if(card) setTimeout(()=>{card.style.transform='';},150);
+    },{passive:true});
+}
+
+function mark2DShortageCubes(){
+    if(!globalShortageList.length) return;
+    const shortageSheets=new Set(globalShortageList.map(i=>i.sheetName.toLowerCase().replace(/\s/g,'')));
+    document.querySelectorAll('.equip-card[data-sheet]').forEach(card=>{
+        const sh=card.getAttribute('data-sheet').toLowerCase().replace(/\s/g,'');
+        if(shortageSheets.has(sh)){
+            card.style.border='2px solid #ef4444';
+            card.style.background='rgba(239,68,68,0.15)';
+            if(!card.querySelector('.shortage-dot')){
+                const dot=document.createElement('span');
+                dot.className='shortage-dot';
+                dot.textContent='⚠️';
+                dot.style.cssText='display:block;font-size:14px;margin-bottom:4px;';
+                card.prepend(dot);
+            }
+        }
+    });
 }
 
 /* ══ 3D 맵 렌더링 ══ */
