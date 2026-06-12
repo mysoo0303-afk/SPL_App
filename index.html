@@ -1265,6 +1265,10 @@ function render3DMap(sheet, mapStartCol){
     const totalW=usedCols.reduce((s,c)=>s+Math.max(wch(c),3),0);
     const calcSpan=(sC,raw)=>{let s=0;for(let ci=sC;ci<sC+raw&&ci<=maxC;ci++)if(!isTunnel(ci))s++;return Math.max(1,s);};
 
+    // 클릭 데이터 저장용 맵
+    const clickMap={};
+    let cellId=0;
+
     let t='<table style="width:100%;border-collapse:separate;border-spacing:5px;table-layout:fixed">';
     t+='<colgroup>';
     usedCols.forEach(c=>{t+=`<col style="width:${(Math.max(wch(c),3)/totalW*100).toFixed(1)}%">`;});
@@ -1289,27 +1293,45 @@ function render3DMap(sheet, mapStartCol){
             }
 
             let linkSheet=val;
-            if(gc.cell?.l?.Target){
+            if(gc.cell&&gc.cell.l&&gc.cell.l.Target){
                 const raw=String(gc.cell.l.Target);
                 if(raw.startsWith('#')) linkSheet=raw.substring(1).split('!')[0].replace(/^'|'$/g,'').trim();
             }
             const col=getDynamicCubeColors(val);
             const shortage=globalShortageList.some(s=>s.sheetName.toLowerCase().replace(/\s/g,'')===(linkSheet||val).toLowerCase().replace(/\s/g,''));
 
-            t+=`<td colspan="${cs}" rowspan="${rs}"
-                onclick="openPartsModal(${JSON.stringify(val)},${JSON.stringify(linkSheet)})"
+            // data 속성으로 클릭 정보 저장 (onclick 인라인 대신)
+            const id='ec'+(cellId++);
+            clickMap[id]={val:val, link:linkSheet};
+
+            t+=`<td colspan="${cs}" rowspan="${rs}" data-eid="${id}"
                 style="background:${col.top};border:2px solid ${shortage?'#ef4444':col.front};
                 border-radius:10px;text-align:center;padding:10px 6px;
                 font-size:12px;font-weight:700;color:var(--cube-text-color);
                 vertical-align:middle;word-break:break-word;line-height:1.4;
                 cursor:pointer;-webkit-tap-highlight-color:transparent;
                 ${shortage?'box-shadow:0 0 0 2px #ef4444;':''}">
-                ${shortage?'⚠️ ':''}${escapeHtml(val)}</td>`;
+                ${shortage?'<span style="color:#ef4444">⚠️</span> ':''}${escapeHtml(val)}</td>`;
         }
         t+='</tr>';
     }
     t+='</tbody></table>';
     mapZone.innerHTML=t;
+
+    // 이벤트 위임으로 클릭 처리
+    mapZone.addEventListener('click', function(e){
+        const td=e.target.closest('td[data-eid]');
+        if(!td) return;
+        const info=clickMap[td.getAttribute('data-eid')];
+        if(info) openPartsModal(info.val, info.link);
+    });
+    mapZone.addEventListener('touchend', function(e){
+        const td=e.target.closest('td[data-eid]');
+        if(!td) return;
+        e.preventDefault();
+        const info=clickMap[td.getAttribute('data-eid')];
+        if(info) openPartsModal(info.val, info.link);
+    });
 }
 
 /* ══ 재고부족 큐브 강조 ══ */
