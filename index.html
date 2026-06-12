@@ -678,7 +678,7 @@ let currentViewId='home';
 
 /* ══ Google Sheets 설정 ══ */
 const GSHEET_ID = '1cLHQNoimvt21TefDiISbkB7il3t-FBrus-_Tz78eexk';
-const GSHEET_EXPORT_URL = `https://docs.google.com/spreadsheets/d/${GSHEET_ID}/export?format=xlsx&cachebust=${Date.now()}`;
+const GSHEET_EXPORT_URL = `https://docs.google.com/spreadsheets/d/${GSHEET_ID}/export?format=xlsx`;
 
 /* ══ 파일 드래그앤드롭 (수동 업로드 백업용) ══ */
 const dropZone = document.getElementById('drop-zone');
@@ -695,18 +695,26 @@ window.addEventListener('DOMContentLoaded', ()=>{
     fetch(GSHEET_EXPORT_URL)
         .then(r=>{ if(!r.ok) throw new Error('fetch fail'); return r.arrayBuffer(); })
         .then(buf=>{
-            showLoading('데이터 처리 중...');
+            showLoading('📊 데이터 분석 중... (10~20초 소요)');
             setTimeout(()=>{
-                excelWorkbook = XLSX.read(new Uint8Array(buf), {type:'array'});
-                buildStockCache();
-                loadLastUpdate();
-                setup3DOrbit();
-                hideLoading();
-                renderDeptCards();
-                showView('home');
-                document.getElementById('home-top-btn').style.display='inline-block';
-                setTimeout(buildBackgroundData, 400);
-            }, 30);
+                try {
+                    excelWorkbook = XLSX.read(new Uint8Array(buf), {type:'array', cellFormula:false, cellHTML:false, cellNF:false, cellStyles:false, dense:false});
+                } catch(e) {
+                    hideLoading();
+                    showView('upload', false);
+                    return;
+                }
+                showLoading('✅ 거의 다 됐어요!');
+                setTimeout(()=>{
+                    buildStockCache();
+                    loadLastUpdate();
+                    hideLoading();
+                    renderDeptCards();
+                    showView('home');
+                    document.getElementById('home-top-btn').style.display='inline-block';
+                    setTimeout(buildBackgroundData, 800);
+                }, 50);
+            }, 100);
         })
         .catch(()=>{
             hideLoading();
@@ -720,10 +728,9 @@ function processExcel(file) {
     r.onload = e=>{
         showLoading('파일 읽는 중...');
         setTimeout(()=>{
-            excelWorkbook = XLSX.read(new Uint8Array(e.target.result), {type:'array'});
+            excelWorkbook = XLSX.read(new Uint8Array(e.target.result), {type:'array', cellFormula:false, cellHTML:false, cellNF:false, cellStyles:false, dense:false});
             buildStockCache();
             loadLastUpdate();
-            setup3DOrbit();
             hideLoading();
             renderDeptCards();
             showView('home');
