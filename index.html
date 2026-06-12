@@ -294,6 +294,14 @@
             height:82vh; display:flex; flex-direction:column;
             overflow:hidden; transition:background-color 0.2s,border-color 0.2s;
         }
+        /* 2D 배치도 스크롤 영역 */
+        #dynamic-factory-map {
+            flex:1; overflow:auto; -webkit-overflow-scrolling:touch;
+            padding:8px;
+        }
+        .equip-cell { user-select:none; }
+        .shortage-cell { border-color:#ef4444 !important; }
+        [data-theme="dark"] .equip-cell { color:#ffffff; }
         .info-banner-3d {
             text-align:center; background:var(--panel-bg); padding:10px;
             border-radius:6px; font-size:12px; color:var(--text-muted);
@@ -301,25 +309,10 @@
         }
         .info-banner-3d span { color:var(--accent-glow); }
         .twin-3d-scene {
-            flex:1; perspective:2500px;
-            display:flex; justify-content:center; align-items:center;
-            overflow:visible; position:relative; cursor:grab;
+            flex:1; display:block; overflow:auto;
+            -webkit-overflow-scrolling:touch;
         }
-        .twin-3d-scene:active { cursor:grabbing; }
-        .twin-3d-grid {
-            display:grid;
-            transform:translate(var(--tx),var(--ty)) rotateX(var(--rx)) rotateY(var(--ry)) rotateZ(var(--rz)) scale(var(--zoom));
-            transform-style:preserve-3d; transform-origin:center center;
-            gap:10px; padding:40px;
-            background:rgba(20,27,45,0.2);
-            border:2px solid var(--border-line); border-radius:12px;
-            box-shadow:0 40px 80px var(--shadow-tone); transition:transform 0.01s linear;
-            grid-auto-flow: row dense;
-        }
-        [data-theme="light"] .twin-3d-grid {
-            background:rgba(255,255,255,0.9); border-color:#e2e8f0;
-            box-shadow:0 8px 30px rgba(148,163,184,0.12);
-        }
+        .twin-3d-grid { display:block; }
         /* 빈 셀: 완전 투명 – 격자선 없음 */
         .cell-3d-floor { background:transparent; border:none; min-width:0; height:0; }
         /* Room backdrop – Press/Sinter/Sand 구역 배경 */
@@ -769,10 +762,7 @@
     </div>
     <div class="map-view-container">
         <div class="info-banner-3d">
-            🚀 3D 조작 &nbsp;|&nbsp;
-            <span>왼클릭 드래그</span>: 이동 &nbsp;|&nbsp;
-            <span>휠클릭 드래그</span>: 360° 회전 &nbsp;|&nbsp;
-            <span>휠 스크롤</span>: 줌
+            👆 탭하면 스페어파트 조회 &nbsp;|&nbsp; 스크롤로 전체 보기
         </div>
         <div class="twin-3d-scene" id="3d-scene-stage">
             <div class="twin-3d-grid" id="dynamic-factory-map"></div>
@@ -856,7 +846,7 @@ function initFromJSON(data){
         Object.entries(sd.cells||{}).forEach(([ref, cell])=>{
             ws[ref] = { v: cell.v };
             // 하이퍼링크: l에 시트명이 직접 저장됨
-            if(cell.l) ws[ref].l = { Target: '#' + "'" + cell.l + "'!A1" };
+            if(cell.l) ws[ref].l = { Target: '#' + cell.l + '!A1' };
         });
         if(sd.merges && sd.merges.length)
             ws['!merges'] = sd.merges.map(r => XLSX.utils.decode_range(r));
@@ -1278,24 +1268,37 @@ function openDept(deptName){
     setTimeout(()=>{syncBillboard();markShortageCubes();updateDeptShortageBtn();autoFitZoom();},80);
 }
 
-/* ══ 3D 맵 렌더링 ══ */
+
+/* ══ 2D 배치도 렌더링 (모바일 최적화) ══ */
 function render3DMap(sheet, mapStartCol){
     const mapZone=document.getElementById('dynamic-factory-map');
     mapZone.innerHTML='';
+    mapZone.style.cssText='display:block;overflow-y:auto;-webkit-overflow-scrolling:touch;height:100%;';
+
     const range=XLSX.utils.decode_range(sheet['!ref']);
     const maxR=range.e.r, maxC=Math.min(range.e.c,51);
-    if(mapStartCol>maxC){mapZone.innerHTML='<p style="color:#64748b;text-align:center;padding:20px;">배치 데이터 없음</p>';return;}
+    if(mapStartCol>maxC){
+        mapZone.innerHTML='<p style="color:#64748b;text-align:center;padding:40px;">배치 데이터 없음</p>';
+        return;
+    }
+
     const DEF=8.43, NARROW=2.5;
     const cw={};
-    if(sheet['!cols']) sheet['!cols'].forEach((c,i)=>{cw[i]=c?.wch??DEF;});
+    if(sheet['!cols']) sheet['!cols'].forEach((c,i)=>{if(c) cw[i]=c.wch??DEF;});
     const wch=c=>cw[c]??DEF;
     const isTunnel=c=>wch(c)<NARROW;
+
     const usedCols=[];
     for(let c=mapStartCol;c<=maxC;c++) if(!isTunnel(c)) usedCols.push(c);
     if(!usedCols.length) return;
 
+    // 그리드 셀 구성 (병합 처리)
     const grid={};
-    for(let r=0;r<=maxR;r++){grid[r]={};for(let c=mapStartCol;c<=maxC;c++) grid[r][c]={cell:sheet[XLSX.utils.encode_cell({r,c})],isMerged:false,rowspan:1,colspan:1,text:''};}
+    for(let r=0;r<=maxR;r++){
+        grid[r]={};
+        for(let c=mapStartCol;c<=maxC;c++)
+            grid[r][c]={cell:sheet[XLSX.utils.encode_cell({r,c})],isMerged:false,rowspan:1,colspan:1,text:''};
+    }
     if(sheet['!merges']){
         sheet['!merges'].forEach(m=>{
             if(m.e.c<mapStartCol||m.s.c>maxC||m.s.r>maxR) return;
@@ -1304,20 +1307,20 @@ function render3DMap(sheet, mapStartCol){
             const oc=sheet[XLSX.utils.encode_cell({r:m.s.r,c:m.s.c})];
             const txt=oc?String(oc.v??'').trim():'';
             if(grid[sR]?.[sC]){grid[sR][sC].rowspan=eR-sR+1;grid[sR][sC].colspan=eC-sC+1;grid[sR][sC].text=txt;}
-            for(let r=sR;r<=eR;r++) for(let c=sC;c<=eC;c++){if(r===sR&&c===sC)continue;if(grid[r]?.[c])grid[r][c].isMerged=true;}
+            for(let r=sR;r<=eR;r++) for(let c=sC;c<=eC;c++){
+                if(r===sR&&c===sC) continue;
+                if(grid[r]?.[c]) grid[r][c].isMerged=true;
+            }
         });
     }
+
     const usedRows=[];
-    for(let r=0;r<=maxR;r++){let has=false;for(const c of usedCols)if(grid[r]?.[c]?.cell?.v||grid[r]?.[c]?.text){has=true;break;}if(has)usedRows.push(r);}
+    for(let r=0;r<=maxR;r++){
+        let has=false;
+        for(const c of usedCols) if(grid[r]?.[c]?.cell?.v||grid[r]?.[c]?.text){has=true;break;}
+        if(has) usedRows.push(r);
+    }
     if(!usedRows.length) return;
-
-    const COL_SCALE=10,COL_MIN=72,ROW_H=52;
-    const colPx={};
-    usedCols.forEach(c=>{colPx[c]=Math.max(COL_MIN,wch(c)*COL_SCALE);});
-    mapZone.style.gridTemplateColumns=usedCols.map(c=>colPx[c]+'px').join(' ');
-    mapZone.style.gap='8px'; mapZone.style.gridAutoFlow='row';
-
-    const calcSpan=(sC,raw)=>{let s=0;for(let ci=sC;ci<sC+raw&&ci<=maxC;ci++)if(!isTunnel(ci))s++;return Math.max(1,s);};
 
     const ROOM_KW=['Press','Sinter','Sand','합금','금형','연삭','코팅','가공','구역','M/C','Robot','QA','IMC'];
     const isRoomHeader=val=>ROOM_KW.some(k=>{
@@ -1325,55 +1328,103 @@ function render3DMap(sheet, mapStartCol){
         if(val.startsWith(k)&&/^[\s\d_\-\/]*$/.test(val.slice(k.length))) return true;
         return false;
     });
+
     const HPAL=[
-        {bg:'rgba(219,234,254,0.7)',border:'#93c5fd',txt:'#1d4ed8'},
-        {bg:'rgba(254,215,170,0.7)',border:'#fdba74',txt:'#c2410c'},
-        {bg:'rgba(187,247,208,0.7)',border:'#86efac',txt:'#15803d'},
-        {bg:'rgba(233,213,255,0.7)',border:'#d8b4fe',txt:'#7e22ce'},
-        {bg:'rgba(207,250,254,0.7)',border:'#67e8f9',txt:'#0e7490'},
-        {bg:'rgba(254,249,195,0.7)',border:'#fcd34d',txt:'#b45309'},
-        {bg:'rgba(254,202,202,0.7)',border:'#fca5a5',txt:'#b91c1c'},
-        {bg:'rgba(209,250,229,0.7)',border:'#6ee7b7',txt:'#065f46'},
+        {bg:'rgba(219,234,254,0.9)',border:'#93c5fd',txt:'#1d4ed8'},
+        {bg:'rgba(254,215,170,0.9)',border:'#fdba74',txt:'#c2410c'},
+        {bg:'rgba(187,247,208,0.9)',border:'#86efac',txt:'#15803d'},
+        {bg:'rgba(233,213,255,0.9)',border:'#d8b4fe',txt:'#7e22ce'},
+        {bg:'rgba(207,250,254,0.9)',border:'#67e8f9',txt:'#0e7490'},
+        {bg:'rgba(254,249,195,0.9)',border:'#fcd34d',txt:'#b45309'},
+        {bg:'rgba(254,202,202,0.9)',border:'#fca5a5',txt:'#b91c1c'},
+        {bg:'rgba(209,250,229,0.9)',border:'#6ee7b7',txt:'#065f46'},
     ];
     let palIdx=0;
     const headerRowPal={};
     for(const r of usedRows){
         for(const c of usedCols){
-            const gc=grid[r]?.[c];if(!gc||gc.isMerged)continue;
+            const gc=grid[r]?.[c];if(!gc||gc.isMerged) continue;
             const val=gc.text||(gc.cell?String(gc.cell.v??'').trim():'');
-            if(val&&isRoomHeader(val)){if(!(r in headerRowPal))headerRowPal[r]=HPAL[palIdx++%HPAL.length];break;}
+            if(val&&isRoomHeader(val)){if(!(r in headerRowPal)) headerRowPal[r]=HPAL[palIdx++%HPAL.length];break;}
         }
     }
 
-    const frags=[];
+    // 열 너비 비율 계산 (상대적)
+    const colWidths=usedCols.map(c=>Math.max(wch(c),3));
+    const totalW=colWidths.reduce((a,b)=>a+b,0);
+    const colPct=colWidths.map(w=>(w/totalW*100).toFixed(2)+'%');
+
+    const calcSpan=(sC,raw)=>{let s=0;for(let ci=sC;ci<sC+raw&&ci<=maxC;ci++)if(!isTunnel(ci))s++;return Math.max(1,s);};
+
+    let tableHtml='<table style="width:100%;border-collapse:separate;border-spacing:4px;table-layout:fixed;">';
+    // colgroup
+    tableHtml+='<colgroup>';
+    usedCols.forEach((_,i)=>{tableHtml+=`<col style="width:${colPct[i]}">`;});
+    tableHtml+='</colgroup><tbody>';
+
     for(const r of usedRows){
         const isHRow=r in headerRowPal;
+        tableHtml+='<tr>';
         for(const c of usedCols){
-            const gc=grid[r]?.[c];if(!gc||gc.isMerged)continue;
+            const gc=grid[r]?.[c];
+            if(!gc||gc.isMerged) continue;
             const cs=calcSpan(c,gc.colspan);
-            let rs=0;for(let ri=r;ri<r+gc.rowspan&&ri<=maxR;ri++)if(usedRows.includes(ri))rs++;if(rs<1)rs=1;
-            const spanSt=`grid-column:span ${cs};grid-row:span ${rs};height:${rs*ROW_H}px;`;
+            let rs=0;
+            for(let ri=r;ri<r+gc.rowspan&&ri<=maxR;ri++) if(usedRows.includes(ri)) rs++;
+            if(rs<1) rs=1;
             const val=gc.text||(gc.cell?String(gc.cell.v??'').trim():'');
-            if(!val){frags.push(`<div style="${spanSt}background:transparent;"></div>`);continue;}
-            if(isRoomHeader(val)&&isHRow){
-                const p=headerRowPal[r];
-                frags.push(`<div style="${spanSt}display:flex;align-items:center;justify-content:center;background:${p.bg};border:2px solid ${p.border};border-radius:8px;box-sizing:border-box;"><span style="font-size:13px;font-weight:900;letter-spacing:2px;color:${p.txt};text-transform:uppercase;">${escapeHtml(val)}</span></div>`);
+
+            if(!val){
+                tableHtml+=`<td colspan="${cs}" rowspan="${rs}" style="background:transparent;"></td>`;
                 continue;
             }
-            // 링크 타겟 추출
+
+            if(isRoomHeader(val)&&isHRow){
+                const p=headerRowPal[r];
+                tableHtml+=`<td colspan="${cs}" rowspan="${rs}"
+                    style="background:${p.bg};border:2px solid ${p.border};border-radius:8px;
+                    text-align:center;padding:8px 4px;font-size:12px;font-weight:900;
+                    color:${p.txt};letter-spacing:1px;vertical-align:middle;">
+                    ${escapeHtml(val)}</td>`;
+                continue;
+            }
+
+            // 장비 셀 - 링크 추출
             let linkSheet=val;
-            if(gc.cell?.l?.Target){const raw=String(gc.cell.l.Target);if(raw.startsWith('#'))linkSheet=raw.substring(1).split('!')[0].replace(/^'|'$/g,'').trim();}
-            const t=getDynamicCubeColors(val);
-            frags.push(`<div class="cube3d-container" data-clickable="true" data-val="${escapeHtml(val)}" data-sheet="${escapeHtml(linkSheet)}" style="${spanSt}--top-color:${t.top};--front-color:${t.front};--left-color:${t.left};"><div class="cube3d-box"><div class="face top" style="background:var(--top-color);"><span>${escapeHtml(val)}</span></div><div class="face front"></div><div class="face back"></div><div class="face left"></div><div class="face right"></div></div></div>`);
+            if(gc.cell?.l?.Target){
+                const raw=String(gc.cell.l.Target);
+                if(raw.startsWith('#')) linkSheet=raw.substring(1).split('!')[0].replace(/^'|'$/g,'').trim();
+            }
+            const hasLink=linkSheet!==val||findSheet(val);
+            const colors=getDynamicCubeColors(val);
+
+            if(hasLink){
+                tableHtml+=`<td colspan="${cs}" rowspan="${rs}"
+                    onclick="openPartsModal('${escapeHtml(val).replace(/'/g,"\'")}','${escapeHtml(linkSheet).replace(/'/g,"\'")}');event.stopPropagation();"
+                    class="equip-cell${globalShortageList.some(s=>s.sheetName.toLowerCase()===linkSheet.toLowerCase())?' shortage-cell':''}"
+                    style="background:${colors.top};border:2px solid ${colors.front};border-radius:10px;
+                    text-align:center;padding:10px 6px;font-size:12px;font-weight:700;
+                    cursor:pointer;vertical-align:middle;
+                    color:var(--cube-text-color);word-break:break-word;line-height:1.3;
+                    transition:transform 0.12s,opacity 0.12s;
+                    -webkit-tap-highlight-color:transparent;"
+                    onmouseenter="this.style.transform='scale(1.04)'"
+                    onmouseleave="this.style.transform=''"
+                    ontouchstart="this.style.opacity='0.75'"
+                    ontouchend="this.style.opacity='1'">
+                    ${escapeHtml(val)}</td>`;
+            } else {
+                tableHtml+=`<td colspan="${cs}" rowspan="${rs}"
+                    style="background:rgba(100,116,139,0.12);border:1px solid var(--table-border);
+                    border-radius:8px;text-align:center;padding:8px 4px;
+                    font-size:11px;color:var(--text-muted);vertical-align:middle;">
+                    ${escapeHtml(val)}</td>`;
+            }
         }
+        tableHtml+='</tr>';
     }
-    mapZone.innerHTML=frags.join('');
-    if(mapZone._cubeClickHandler) mapZone.removeEventListener('click', mapZone._cubeClickHandler);
-    mapZone._cubeClickHandler = e=>{
-        const cube=e.target.closest('.cube3d-container[data-clickable="true"]');
-        if(cube) openPartsModal(cube.getAttribute('data-val'), cube.getAttribute('data-sheet'));
-    };
-    mapZone.addEventListener('click', mapZone._cubeClickHandler);
+    tableHtml+='</tbody></table>';
+    mapZone.innerHTML=tableHtml;
 }
 
 /* ══ 재고부족 큐브 강조 ══ */
