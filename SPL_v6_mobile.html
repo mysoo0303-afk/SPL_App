@@ -1,0 +1,1673 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TaeguTec 생산장비 Spare Part List</title>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <style>
+        :root[data-theme="dark"] {
+            --bg-color: #0b0f19; --panel-bg: #141b2d; --text-main: #f8fafc;
+            --text-muted: #94a3b8; --border-line: #1f293d; --table-border: #334155;
+            --map-bg: #0c101b; --floor-color: rgba(255,255,255,0.005);
+            --floor-border: rgba(255,255,255,0.015); --shadow-tone: rgba(0,0,0,0.6);
+            --cube-text-color: #ffffff; --map-border-color: #1f293d;
+        }
+        :root[data-theme="light"] {
+            --bg-color: #f1f5f9; --panel-bg: #ffffff; --text-main: #0f172a;
+            --text-muted: #64748b; --border-line: #cbd5e1; --table-border: #cbd5e1;
+            --map-bg: #ffffff; --floor-color: rgba(0,0,0,0.01);
+            --floor-border: rgba(0,0,0,0.04); --shadow-tone: rgba(148,163,184,0.15);
+            --cube-text-color: #0f172a; --map-border-color: #e2e8f0;
+        }
+        :root {
+            --primary-gradient: linear-gradient(135deg,#1e3c72 0%,#2a5298 100%);
+            --accent-glow: #38bdf8;
+            --rx:0deg; --ry:0deg; --rz:0deg; --tx:0px; --ty:0px; --zoom:0.95; --cube-h:50px;
+        }
+        *, *::before, *::after { box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI','Malgun Gothic',sans-serif;
+            margin:0; padding:0; background-color:var(--bg-color); color:var(--text-main);
+            overflow-x:hidden; user-select:none; transition:background-color 0.2s,color 0.2s;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        /* ── 모바일 최적화 ── */
+        @media (max-width: 768px) {
+            header { padding:0 12px; height:50px; }
+            .header-logo { font-size:16px; }
+            .header-sub { display:none; }
+            #global-search { width:140px; font-size:12px; }
+            #global-search:focus { width:180px; }
+            #search-dropdown { width:calc(100vw - 24px); right:-60px; }
+            .btn-common { padding:6px 10px; font-size:12px; }
+            .theme-btn { padding:4px 10px; font-size:12px; }
+
+            #view-home { padding:10px 12px 20px; }
+            .home-toolbar { flex-wrap:wrap; gap:8px; }
+            .home-toolbar h2 { font-size:16px; }
+            .home-toolbar-right { gap:6px; }
+            .bottom-status { font-size:11px; padding:5px 10px; }
+            .alert-btn-sm { font-size:11px; padding:5px 10px; }
+
+            .factory-map-wrap { padding:10px; border-radius:10px; }
+
+            #view-dept { padding:0; }
+            .dept-header { padding:10px 12px 0; gap:10px; flex-wrap:wrap; }
+            .dept-header h2 { font-size:16px; }
+            .map-view-container { margin:8px 12px 16px; padding:12px; height:75vh; }
+            .info-banner-3d { font-size:11px; padding:7px; }
+
+            .parts-modal-box { width:100vw; height:100vh; border-radius:0; }
+            .parts-modal-head { padding:10px 14px; gap:10px; }
+            .parts-modal-head h2 { font-size:14px; }
+            .parts-search { width:100%; font-size:12px; }
+
+            .part-table th, .part-table td { font-size:11px; padding:6px 8px !important; }
+
+            .back-btn { font-size:12px; padding:5px 10px; }
+            .dept-shortage-btn { font-size:12px; padding:5px 12px; }
+
+            #dept-shortage-modal .parts-modal-box { width:100vw; height:100vh; border-radius:0; }
+        }
+        @media (max-width: 480px) {
+            #global-search { width:110px; }
+            #global-search:focus { width:150px; }
+            .home-toolbar h2 { font-size:14px; }
+        }
+        body.parts-active {
+            overflow-x:auto;
+        }
+        header {
+            background:var(--panel-bg); border-bottom:1px solid var(--border-line);
+            padding:0 32px; height:56px;
+            display:flex; justify-content:space-between; align-items:center;
+            box-shadow:0 4px 20px var(--shadow-tone); position:sticky; top:0; z-index:100;
+        }
+        .header-left { display:flex; align-items:center; gap:18px; }
+        .header-logo { font-size:20px; font-weight:900; color:var(--accent-glow); letter-spacing:-0.5px; }
+        .header-sub  { font-size:13px; color:var(--text-muted); font-weight:500; }
+        .header-right { display:flex; align-items:center; gap:10px; }
+        .btn-common {
+            padding:7px 16px; background:var(--primary-gradient);
+            border:none; color:white; border-radius:6px;
+            cursor:pointer; font-weight:bold; font-size:13px; transition:all 0.2s;
+        }
+        .btn-common:hover { transform:translateY(-1px); box-shadow:0 4px 12px rgba(56,189,248,0.3); }
+        .theme-btn {
+            background:transparent; border:1.5px solid var(--accent-glow);
+            color:var(--accent-glow); border-radius:20px; padding:5px 14px;
+            font-weight:bold; font-size:13px; cursor:pointer; transition:all 0.2s;
+        }
+        .theme-btn:hover { background:var(--accent-glow); color:#0f172a; }
+        .view { display:none; }
+        .view.active { display:block; }
+
+        /* 로딩/업로드 */
+        .upload-card {
+            background:var(--panel-bg); border-radius:16px; padding:80px 40px;
+            text-align:center; max-width:600px; margin:120px auto;
+            box-shadow:0 20px 50px var(--shadow-tone); border:2px dashed #38bdf8;
+        }
+        .spinner {
+            width:50px; height:50px; border:5px solid rgba(56,189,248,0.1);
+            border-radius:50%; border-top-color:var(--accent-glow);
+            margin:0 auto 20px; animation:spin 1s linear infinite;
+        }
+        @keyframes spin { to { transform:rotate(360deg); } }
+
+        /* ── 재고부족 뱃지 ── */
+        .zone-wrapper { position:relative; display:inline-block; }
+        .shortage-badge {
+            position:absolute; top:-6px; right:-6px;
+            background:#ef4444; color:#fff;
+            font-size:10px; font-weight:900;
+            border-radius:50%; min-width:18px; height:18px;
+            display:flex; align-items:center; justify-content:center;
+            border:2px solid var(--panel-bg);
+            pointer-events:none; z-index:10;
+            font-family:'Segoe UI',sans-serif;
+            box-shadow:0 2px 6px rgba(239,68,68,0.5);
+        }
+        /* SVG 위에 뱃지는 foreignObject 대신 circle+text로 처리 */
+        .svg-badge-circle { fill:#ef4444; }
+        .svg-badge-text {
+            fill:white; font-size:9px; font-weight:900;
+            text-anchor:middle; dominant-baseline:central;
+            font-family:'Segoe UI',sans-serif; pointer-events:none;
+        }
+
+        /* ── 3D 큐브 재고부족 강조 ── */
+        .cube-shortage .top { background: rgba(239,68,68,0.55) !important; }
+        .cube-shortage .front { background: rgba(200,30,30,0.60) !important; }
+        .cube-shortage .back  { background: rgba(200,30,30,0.60) !important; }
+        .cube-shortage .left  { background: rgba(170,20,20,0.65) !important; }
+        .cube-shortage .right { background: rgba(170,20,20,0.65) !important; }
+        .cube-shortage .top span { color:#fff !important; }
+
+        /* ── 전체 로딩 오버레이 ── */
+        #loading-overlay {
+            display:none; position:fixed; inset:0; z-index:9999;
+            background:rgba(11,15,25,0.72); backdrop-filter:blur(4px);
+            flex-direction:column; align-items:center; justify-content:center; gap:16px;
+        }
+        #loading-overlay.show { display:flex; }
+        .loading-spinner-lg {
+            width:56px; height:56px;
+            border:6px solid rgba(56,189,248,0.15);
+            border-top-color:var(--accent-glow);
+            border-radius:50%; animation:spin 0.8s linear infinite;
+        }
+        #loading-overlay p { color:#e2e8f0; font-size:15px; font-weight:600; margin:0; }
+
+        /* ── 전체 검색 ── */
+        .global-search-wrap {
+            position:relative; display:flex; align-items:center;
+        }
+        #global-search {
+            width:220px; padding:6px 32px 6px 12px;
+            border:1.5px solid var(--border-line);
+            background:var(--bg-color); color:var(--text-main);
+            border-radius:20px; font-size:13px; outline:none;
+            transition:border-color 0.2s, width 0.2s;
+        }
+        #global-search:focus { border-color:var(--accent-glow); width:280px; }
+        .global-search-icon {
+            position:absolute; right:10px; color:var(--text-muted);
+            font-size:14px; pointer-events:none;
+        }
+        /* 전체검색 결과 드롭다운 */
+        #search-dropdown {
+            display:none; position:absolute; top:calc(100% + 6px); right:0;
+            width:420px; max-height:400px; overflow-y:auto;
+            background:var(--panel-bg); border:1px solid var(--border-line);
+            border-radius:10px; box-shadow:0 8px 24px var(--shadow-tone);
+            z-index:500;
+        }
+        #search-dropdown.show { display:block; }
+        .search-result-item {
+            padding:10px 16px; cursor:pointer; border-bottom:1px solid var(--border-line);
+            transition:background 0.12s;
+        }
+        .search-result-item:last-child { border-bottom:none; }
+        .search-result-item:hover { background:rgba(56,189,248,0.08); }
+        .sri-machine { font-size:13px; font-weight:700; color:var(--accent-glow); }
+        .sri-part    { font-size:12px; color:var(--text-main); margin-top:2px; }
+        .sri-sheet   { font-size:11px; color:var(--text-muted); margin-top:1px; }
+        .search-result-empty { padding:20px; text-align:center; color:var(--text-muted); font-size:13px; }
+
+
+        /* ═══ 홈 ═══ */
+        #view-home { padding:20px 32px 32px; max-width:1400px; margin:0 auto; }
+        .home-toolbar {
+            display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;
+        }
+        .home-toolbar h2 { margin:0; font-size:20px; color:var(--accent-glow); font-weight:800; }
+        .home-toolbar-right { display:flex; gap:10px; align-items:center; }
+        .bottom-status {
+            background:var(--panel-bg); border:1px solid var(--border-line);
+            padding:7px 18px; border-radius:8px; font-size:13px;
+            color:var(--text-muted); font-weight:600;
+        }
+        .alert-btn-sm {
+            padding:7px 18px; border-radius:8px; font-size:13px; font-weight:bold;
+            cursor:pointer; border:1.5px solid #f5c6cb; background:#f8d7da; color:#721c24; transition:all 0.15s;
+        }
+        .alert-btn-sm:hover { background:#f1b0b7; }
+
+        /* 공장 배치도 SVG 래퍼 */
+        .factory-map-wrap {
+            background:var(--panel-bg); border:1px solid var(--border-line);
+            border-radius:14px; padding:20px;
+            box-shadow:0 8px 32px var(--shadow-tone);
+        }
+        .factory-map-wrap svg { width:100%; height:auto; display:block; }
+
+        /* SVG 공장 배치도 배경 */
+        .factory-bg-rect { fill: #e8edf2; }
+        [data-theme="dark"] .factory-bg-rect { fill: #1e2535; }
+
+        /* SVG 공통 스타일 */
+        /* 파란 구역 (생산부서) */
+        .zone-dept {
+            fill: #daeaf7; stroke: #a8c8e8; stroke-width:1;
+            cursor:pointer; transition:fill 0.15s;
+        }
+        .zone-dept:hover { fill: #b8d9f0; }
+        [data-theme="dark"] .zone-dept { fill:rgba(56,189,248,0.15); stroke:#38bdf8; }
+        [data-theme="dark"] .zone-dept:hover { fill:rgba(56,189,248,0.28); }
+
+        /* 초록 구역 (잔디) */
+        .zone-grass { fill:#d4edda; stroke:#a8d5b5; stroke-width:1; pointer-events:none; }
+        [data-theme="dark"] .zone-grass { fill:rgba(52,211,153,0.10); stroke:#34d399; }
+
+        /* Roll 구역 */
+        .zone-roll {
+            fill:#daeaf7; stroke:#a8c8e8; stroke-width:1;
+            cursor:pointer; transition:fill 0.15s;
+        }
+        .zone-roll:hover { fill:#b8d9f0; }
+        [data-theme="dark"] .zone-roll { fill:rgba(56,189,248,0.15); stroke:#38bdf8; }
+        [data-theme="dark"] .zone-roll:hover { fill:rgba(56,189,248,0.28); }
+
+        /* 청구버튼 구역 */
+        .zone-alert {
+            fill:#fde8e8; stroke:#f5c6cb; stroke-width:1;
+            cursor:pointer; transition:fill 0.15s;
+        }
+        .zone-alert:hover { fill:#f8c0c0; }
+
+        /* 라벨 공통 */
+        .zlabel {
+            font-family:'Malgun Gothic','Segoe UI',sans-serif;
+            font-size:14px; font-weight:700;
+            text-anchor:middle; dominant-baseline:middle;
+            fill:#1e3a5f; pointer-events:none;
+        }
+        .zlabel-sm { font-size:12px; }
+        /* 다크모드: SVG 텍스트 밝게 (뿌옇지 않게) */
+        [data-theme="dark"] .zlabel { fill:#e2f0ff; }
+        .zlabel-alert { fill:#7f1d1d; }
+
+        /* ═══ 부서 3D 뷰 ═══ */
+        #view-dept { padding:0; max-width:1750px; margin:0 auto; }
+        .dept-header {
+            display:flex; align-items:center; gap:16px;
+            padding:16px 32px 0;
+        }
+        .dept-header h2 { margin:0; font-size:20px; color:var(--accent-glow); font-weight:800; }
+        .back-btn {
+            padding:6px 14px; border-radius:8px; font-size:13px; font-weight:bold;
+            cursor:pointer; border:1.5px solid var(--border-line);
+            background:var(--panel-bg); color:var(--text-main); transition:all 0.15s;
+        }
+        .back-btn:hover { border-color:var(--accent-glow); color:var(--accent-glow); }
+        .dept-shortage-btn {
+            padding:6px 16px; border-radius:8px; font-size:13px; font-weight:bold;
+            cursor:pointer; border:1.5px solid #f5c6cb;
+            background:#f8d7da; color:#721c24; transition:all 0.15s;
+            margin-left:auto;
+        }
+        .dept-shortage-btn:hover { background:#f1b0b7; box-shadow:0 0 10px rgba(239,68,68,0.3); }
+
+        .dept-shortage-btn.has-shortage {
+            animation: pulse-red 1.5s ease-in-out infinite;
+        }
+        @keyframes pulse-red {
+            0%,100% { box-shadow:0 0 0 0 rgba(239,68,68,0.4); }
+            50%      { box-shadow:0 0 0 6px rgba(239,68,68,0); }
+        }
+        .map-view-container {
+            margin:12px 32px 32px; background:var(--map-bg); padding:20px;
+            border:1px solid var(--map-border-color); border-radius:12px;
+            box-shadow:inset 0 0 40px var(--shadow-tone);
+            height:82vh; display:flex; flex-direction:column;
+            overflow:hidden; transition:background-color 0.2s,border-color 0.2s;
+        }
+        .info-banner-3d {
+            text-align:center; background:var(--panel-bg); padding:10px;
+            border-radius:6px; font-size:12px; color:var(--text-muted);
+            border:1px solid var(--border-line); margin-bottom:12px; font-weight:bold;
+        }
+        .info-banner-3d span { color:var(--accent-glow); }
+        .twin-3d-scene {
+            flex:1; perspective:2500px;
+            display:flex; justify-content:center; align-items:center;
+            overflow:visible; position:relative; cursor:grab;
+        }
+        .twin-3d-scene:active { cursor:grabbing; }
+        .twin-3d-grid {
+            display:grid;
+            transform:translate(var(--tx),var(--ty)) rotateX(var(--rx)) rotateY(var(--ry)) rotateZ(var(--rz)) scale(var(--zoom));
+            transform-style:preserve-3d; transform-origin:center center;
+            gap:10px; padding:40px;
+            background:rgba(20,27,45,0.2);
+            border:2px solid var(--border-line); border-radius:12px;
+            box-shadow:0 40px 80px var(--shadow-tone); transition:transform 0.01s linear;
+            grid-auto-flow: row dense;
+        }
+        [data-theme="light"] .twin-3d-grid {
+            background:rgba(255,255,255,0.9); border-color:#e2e8f0;
+            box-shadow:0 8px 30px rgba(148,163,184,0.12);
+        }
+        /* 빈 셀: 완전 투명 – 격자선 없음 */
+        .cell-3d-floor { background:transparent; border:none; min-width:0; height:0; }
+        /* Room backdrop – Press/Sinter/Sand 구역 배경 */
+        .room-backdrop {
+            /* CSS Grid에서 다른 아이템 위에 겹치도록 */
+            pointer-events: none;
+            z-index: 0;
+            border-radius: 10px;
+            transform-style: preserve-3d;
+            transform: translateZ(-8px); /* 3D에서 바닥 층에 살짝 내림 */
+        }
+        /* 벽 열 패널 */
+        .wall-col-panel {
+            width:100%; height:100%;
+            background:linear-gradient(90deg,
+                rgba(120,180,255,0.04) 0%,
+                rgba(160,210,255,0.20) 45%,
+                rgba(200,230,255,0.26) 50%,
+                rgba(160,210,255,0.20) 55%,
+                rgba(120,180,255,0.04) 100%);
+            border-left:2px solid rgba(100,170,255,0.5);
+            border-right:2px solid rgba(100,170,255,0.5);
+            border-top:1px solid rgba(100,170,255,0.18);
+            border-bottom:1px solid rgba(100,170,255,0.18);
+            border-radius:3px;
+            box-shadow:0 0 10px rgba(100,170,255,0.18);
+        }
+        [data-theme="light"] .wall-col-panel {
+            background:linear-gradient(90deg,
+                rgba(80,140,220,0.03) 0%,
+                rgba(100,160,240,0.18) 45%,
+                rgba(120,180,255,0.25) 50%,
+                rgba(100,160,240,0.18) 55%,
+                rgba(80,140,220,0.03) 100%);
+            border-left-color:rgba(60,120,200,0.45);
+            border-right-color:rgba(60,120,200,0.45);
+        }
+        .cube3d-container { position:relative; transform-style:preserve-3d; }
+        .cube3d-box {
+            position:absolute; width:100%; height:100%;
+            transform-style:preserve-3d; transform:translateZ(0); transition:transform 0.15s ease;
+        }
+        .cube3d-container[data-clickable="true"]:hover .cube3d-box { transform:translateZ(15px); cursor:pointer; }
+        .cube3d-box .face { position:absolute; box-sizing:border-box; border:1px solid rgba(255,255,255,0.22); }
+        .cube3d-box .top {
+            width:100%; height:100%; top:0; left:0;
+            transform:translateZ(var(--cube-h)); position:relative;
+            display:flex; align-items:center; justify-content:center;
+            box-shadow:inset 0 0 12px rgba(255,255,255,0.15);
+        }
+        .cube3d-box .top span {
+            display:block; width:max-content; text-align:center;
+            transform:rotateZ(calc(-1 * var(--rz))) rotateY(calc(-1 * var(--ry))) rotateX(calc(-1 * var(--rx)));
+            font-size:13.5px; font-weight:bold; color:var(--cube-text-color);
+            white-space:nowrap; letter-spacing:-0.3px;
+            transform-origin:center center; transition:transform 0.01s linear; backface-visibility:visible;
+        }
+        [data-theme="light"] .cube3d-box .face { border-color:rgba(0,0,0,0.08); }
+        .cube3d-box .front { width:100%; height:var(--cube-h); left:0; bottom:0; transform:rotateX(-90deg); transform-origin:bottom; background:var(--front-color); }
+        .cube3d-box .back  { width:100%; height:var(--cube-h); left:0; top:0;   transform:rotateX(90deg);  transform-origin:top;    background:var(--front-color); }
+        .cube3d-box .left  { width:var(--cube-h); height:100%; left:0;  top:0; transform:rotateY(-90deg); transform-origin:left;  background:var(--left-color); }
+        .cube3d-box .right { width:var(--cube-h); height:100%; right:0; top:0; transform:rotateY(90deg);  transform-origin:right; background:var(--left-color); }
+        .header-cube .top { background:rgba(250,204,21,0.7) !important; }
+        .header-cube .top span { color:#0f172a !important; }
+        .header-cube .front,.header-cube .back { background:rgba(225,177,44,0.75); }
+        .header-cube .left,.header-cube .right { background:rgba(202,138,4,0.8); }
+        .cube3d-container[data-clickable="true"]:hover .top { background:#fffa65 !important; }
+        .cube3d-container[data-clickable="true"]:hover .top span { color:#000 !important; }
+
+        /* ═══ 스페어파트 팝업 모달 ═══ */
+        .parts-search {
+            width:280px; padding:7px 14px;
+            border:1px solid var(--border-line);
+            background:var(--bg-color); color:var(--text-main);
+            border-radius:7px; font-size:13px; outline:none; flex-shrink:0;
+        }
+        /* 텍스트 선택/드래그 복사 허용 */
+        #view-parts, #view-parts * { user-select:text !important; }
+        #view-summary, #view-summary * { user-select:text !important; }
+
+        /* 모달 공통 */
+        .modal-overlay {
+            display:none; position:fixed; inset:0;
+            background:rgba(11,15,25,0.75); backdrop-filter:blur(6px);
+            z-index:2000; justify-content:center; align-items:center;
+        }
+        /* 스페어파트 팝업 박스 */
+        .parts-modal-box {
+            width:93vw; max-width:1440px; height:88vh;
+            background:var(--panel-bg); border-radius:14px;
+            display:flex; flex-direction:column; overflow:hidden;
+            box-shadow:0 24px 64px rgba(0,0,0,0.55);
+            border:1px solid var(--border-line);
+        }
+        .parts-modal-head {
+            display:flex; align-items:center; gap:14px;
+            padding:13px 22px; flex-shrink:0;
+            border-bottom:1px solid var(--border-line);
+            background:var(--panel-bg);
+        }
+        .parts-modal-head h2 {
+            margin:0; font-size:16px; color:var(--accent-glow);
+            font-weight:800; flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+        }
+        .parts-modal-body {
+            flex:1; overflow-x:auto; overflow-y:auto;
+            scrollbar-width:thin; scrollbar-color:#94a3b8 transparent;
+        }
+        .parts-modal-body::-webkit-scrollbar { height:8px; width:8px; }
+        .parts-modal-body::-webkit-scrollbar-track { background:transparent; }
+        .parts-modal-body::-webkit-scrollbar-thumb { background:#94a3b8; border-radius:4px; }
+        .parts-modal-body .part-table { width:100%; }
+        /* 헤더 고정 */
+        .parts-modal-body .part-table th {
+            position:sticky; top:0; z-index:5;
+            white-space:nowrap;
+        }
+        /* 데이터 셀: 줄바꿈 허용, 행 높이 자동 */
+        .parts-modal-body .part-table td {
+            white-space:normal !important;
+            word-break:break-all;
+            height:auto !important;
+            min-height:40px;
+            min-width:60px;
+            padding:7px 12px !important;
+            vertical-align:middle;
+        }
+        .modal-close-x {
+            background:transparent; border:1.5px solid var(--border-line);
+            color:var(--text-muted); border-radius:6px;
+            padding:4px 11px; font-size:18px; line-height:1;
+            cursor:pointer; flex-shrink:0; transition:all 0.15s;
+        }
+        .modal-close-x:hover { border-color:#ef4444; color:#ef4444; }
+
+        .part-table {
+            width:100%; border-collapse:collapse; font-size:13px;
+            border:1px solid var(--table-border);
+        }
+        .part-table th,.part-table td {
+            border:1px solid var(--table-border) !important;
+            padding:0 15px; vertical-align:middle; height:46px !important; white-space:nowrap;
+        }
+        .part-table th { background:var(--bg-color); color:#38bdf8; font-weight:bold; cursor:pointer; user-select:none; }
+        .part-table th:hover { background:#162238; color:white; }
+        [data-theme="light"] .part-table th:hover { background:#e0f2fe; color:#0369a1; }
+        .part-table tr { background:var(--panel-bg); }
+        .summary-table {
+            width:100%; border-collapse:collapse; font-size:13px; border:1px solid #b0c9e8;
+        }
+        .summary-table th,.summary-table td {
+            border:1px solid #b0c9e8 !important;
+            padding:0 15px; vertical-align:middle; height:46px !important; white-space:nowrap;
+        }
+        .summary-table th { background:#dbeafe; color:#1e40af; font-weight:bold; cursor:pointer; user-select:none; }
+        [data-theme="dark"] .summary-table { border-color:#334e6e; }
+        [data-theme="dark"] .summary-table th,[data-theme="dark"] .summary-table td { border-color:#334e6e !important; }
+        [data-theme="dark"] .summary-table th { background:#1a2d45; color:#7dd3fc; }
+        .summary-table tr { background:var(--panel-bg); }
+        .summary-table tr[data-clickable="true"]:hover td { background:rgba(56,189,248,0.08); cursor:pointer; }
+        .danger-row { background:rgba(239,68,68,0.12) !important; color:#f87171 !important; font-weight:bold; }
+        .none-row   { background:rgba(148,163,184,0.12) !important; color:#94a3b8 !important; }
+    </style>
+</head>
+<body>
+
+<!-- 전체 로딩 오버레이 -->
+<div id="loading-overlay"><div class="loading-spinner-lg"></div><p id="loading-msg">데이터 처리 중...</p></div>
+
+<header>
+    <div class="header-left">
+        <span class="header-logo">⚙️ TaeguTec</span>
+        <span class="header-sub">생산장비 Spare Part List 관제 시스템</span>
+    </div>
+    <div class="header-right">
+        <div class="global-search-wrap">
+            <input id="global-search" type="text" placeholder="🔍 전체 부품 검색..." oninput="onGlobalSearch(this.value)" onblur="hideSearchDropdown()" onfocus="if(this.value.trim())onGlobalSearch(this.value)">
+            <span class="global-search-icon">⌕</span>
+            <div id="search-dropdown"></div>
+        </div>
+        <button class="theme-btn" onclick="toggleTheme()">🌓 테마</button>
+        <button id="home-top-btn" class="btn-common" onclick="goHome()" style="display:none">🏠 메인</button>
+    </div>
+</header>
+
+<!-- 로딩 -->
+<div id="view-loading" class="view active">
+    <div class="upload-card">
+        <div class="spinner"></div>
+        <h2>데이터 로딩 중</h2>
+        <p style="color:var(--accent-glow);font-weight:bold;margin-bottom:5px;">Google Sheets에서 데이터를 불러오는 중입니다...</p>
+        <p style="color:#64748b;font-size:12px;">잠시만 기다려주세요.</p>
+    </div>
+</div>
+
+<!-- 수동 업로드 (Google Sheets 연결 실패 시 백업) -->
+<div id="view-upload" class="view">
+    <div class="upload-card" id="drop-zone">
+        <span style="font-size:50px;display:inline-block;margin-bottom:15px">⚠️</span>
+        <h2>데이터 로드 실패</h2>
+        <p style="color:#38bdf8;font-size:14px;margin-bottom:8px;">Google Sheets 연결에 실패했습니다.</p>
+        <p style="color:#64748b;font-size:12px;margin-bottom:20px;">
+            인터넷 연결을 확인하거나, 아래에서 SPL.xlsx 파일을 직접 선택하세요.
+        </p>
+        <button onclick="document.getElementById('file-loader').click()"
+                style="padding:10px 28px;background:var(--primary-gradient);
+                       border:none;color:white;border-radius:8px;font-size:14px;
+                       font-weight:bold;cursor:pointer;
+                       box-shadow:0 4px 14px rgba(56,189,248,0.3);">
+            📂 파일 직접 선택
+        </button>
+        <input type="file" id="file-loader" accept=".xlsx" style="display:none">
+    </div>
+</div>
+
+<!-- 홈 – 공장 배치도 -->
+<div id="view-home" class="view">
+    <div class="home-toolbar">
+        <h2>🏭 TaeguTec 공장 전체 배치도</h2>
+        <div class="home-toolbar-right">
+            <span class="bottom-status" id="last-update-txt">Last Update: -</span>
+            <button class="alert-btn-sm" onclick="openSummaryModal()">📋 청구 필요 자재</button>
+        </div>
+    </div>
+
+    <div class="factory-map-wrap">
+        <!--
+        ═══════════════════════════════════════════════════════
+         SVG 좌표계  viewBox="0 0 1080 400"
+         이미지 비율 분석 결과:
+
+         [열 구분 - X축]
+          col0  x=0    w=10  (외곽 여백)
+          col1  x=10   w=270 (IMC ENDMILL / 코팅2+연삭2+금형2합금2 / 가공)
+          col2  x=280  w=16  (사잇길 1)
+          col3  x=296  w=110 (원료 구역 / 잔디 좌)
+          col4  x=406  w=6   (점선 경계)
+          col5  x=412  w=236 (M/C+금형1+합금1 / 잔디 중)
+          col6  x=648  w=16  (사잇길 2)
+          col7  x=664  w=96  (Roll / 잔디 우)
+          col8  x=760  w=16  (사잇길 3)
+          col9  x=776  w=108 (드릴+세라믹 / 연삭1+코팅1)
+          col10 x=884  w=10  (외곽 여백)  → 총=894... 조정 후 1080
+
+         [행 구분 - Y축]
+          row0  y=0    h=10  (외곽 여백)
+          row1  y=10   h=100 (1행: 메인 부서들)
+          row2  y=110  h=16  (사잇길 수평)
+          row3  y=126  h=130 (2행: 코팅2/연삭2/금형2합금2 / 잔디 / Roll / 연삭1코팅1)
+          row4  y=256  h=16  (사잇길 수평)
+          row5  y=272  h=80  (3행: 가공)
+          row6  y=352  h=10  (외곽 여백)  → 총=362... viewBox 세로 조정
+
+         ─ 실제 viewBox: 0 0 910 370
+         ─ 단위 스케일: 1픽셀 = 1유닛 (이미지 실측 근사)
+        ═══════════════════════════════════════════════════════
+        -->
+        <svg viewBox="0 0 910 370" xmlns="http://www.w3.org/2000/svg" id="factory-svg">
+
+            <!-- 전체 배경 (연회색 - 사잇길/바닥 표현, 다크모드는 CSS로 처리) -->
+            <rect width="910" height="370" rx="8" class="factory-bg-rect"/>
+
+            <!-- ════════════════════════════
+                 1행 (y=10, h=100)
+            ════════════════════════════ -->
+
+            <!-- IMC ENDMILL: x=10, y=10, w=270, h=100 -->
+            <rect class="zone-dept" x="10" y="10" width="270" height="100" rx="5"
+                  onclick="openDept('IMC ENDMILL')" id="zone-IMC ENDMILL"/>
+            <text class="zlabel" x="145" y="60">IMC ENDMILL</text>
+
+            <!-- 원료: x=296, y=10, w=100, h=100 -->
+            <rect class="zone-dept" x="296" y="10" width="100" height="100" rx="5"
+                  onclick="openDept('원료')" id="zone-원료"/>
+            <text class="zlabel" x="346" y="60">원료</text>
+
+            <!-- M/C: x=406, y=10, w=96, h=100
+                 (점선 경계는 금형1/합금1과 묶인 영역으로 처리)
+                 이미지에서 M/C | 금형1 | 합금1 이 한 블록처럼 붙어있음 -->
+            <rect class="zone-dept" x="406" y="10" width="88" height="100" rx="5"
+                  onclick="openDept('M/C')" id="zone-MC"/>
+            <text class="zlabel" x="450" y="60">M/C</text>
+
+            <!-- 금형1: x=504, y=10, w=84, h=100 -->
+            <rect class="zone-dept" x="504" y="10" width="84" height="100" rx="5"
+                  onclick="openDept('금형1')" id="zone-금형1"/>
+            <text class="zlabel" x="546" y="60">금형1</text>
+
+            <!-- 합금1: x=598, y=10, w=88, h=100 -->
+            <rect class="zone-dept" x="598" y="10" width="88" height="100" rx="5"
+                  onclick="openDept('합금1')" id="zone-합금1"/>
+            <text class="zlabel" x="642" y="60">합금1</text>
+
+            <!-- 드릴: x=702, y=10, w=100, h=100 -->
+            <rect class="zone-dept" x="702" y="10" width="100" height="100" rx="5"
+                  onclick="openDept('드릴')" id="zone-드릴"/>
+            <text class="zlabel" x="752" y="60">드릴</text>
+
+            <!-- 세라믹: x=812, y=10, w=88, h=100 -->
+            <rect class="zone-dept" x="812" y="10" width="88" height="100" rx="5"
+                  onclick="openDept('세라믹')" id="zone-세라믹"/>
+            <text class="zlabel" x="856" y="60">세라믹</text>
+
+            <!-- ════════════════════════════
+                 2행 (y=126, h=130)
+                 코팅2(x=10,w=84,h=130 전체)
+                 연삭2(x=104,w=84,h=130 전체)
+                 금형2(x=198,w=82,h=57)
+                 합금2(x=198,w=82,h=57, y=198)
+                 QA  (x=10,w=84,h=44, y=212) - 이미지상 코팅2 하단에 붙음
+            ════════════════════════════ -->
+
+            <!-- 코팅2: x=10, y=126, w=84, h=88 -->
+            <rect class="zone-dept" x="10" y="126" width="84" height="88" rx="5"
+                  onclick="openDept('코팅2')" id="zone-코팅2"/>
+            <text class="zlabel" x="52" y="170">코팅2</text>
+
+            <!-- QA: x=10, y=224, w=84, h=42 (코팅2 바로 아래) -->
+            <rect class="zone-dept" x="10" y="224" width="84" height="42" rx="5"
+                  onclick="openDept('QA')" id="zone-QA"/>
+            <text class="zlabel" x="52" y="245">QA</text>
+
+            <!-- 연삭2: x=104, y=126, w=84, h=140 (코팅2+QA 합친 높이) -->
+            <rect class="zone-dept" x="104" y="126" width="84" height="140" rx="5"
+                  onclick="openDept('연삭2')" id="zone-연삭2"/>
+            <text class="zlabel" x="146" y="196">연삭2</text>
+
+            <!-- 금형2: x=198, y=126, w=82, h=57 -->
+            <rect class="zone-dept" x="198" y="126" width="82" height="57" rx="5"
+                  onclick="openDept('금형2')" id="zone-금형2"/>
+            <text class="zlabel" x="239" y="155">금형2</text>
+
+            <!-- 합금2: x=198, y=193, w=82, h=53 -->
+            <rect class="zone-dept" x="198" y="193" width="82" height="57" rx="5"
+                  onclick="openDept('합금2')" id="zone-합금2"/>
+            <text class="zlabel" x="239" y="222">합금2</text>
+
+            <!-- ── 잔디(녹색) 구역 ──
+                 이미지: 사잇길 이후 ~ Roll 전까지의 넓은 녹색 블록
+                 x=296, y=126, w=310, h=140
+                 (원료 아래부터 M/C+금형1+합금1 아래까지) -->
+            <rect class="zone-grass" x="296" y="126" width="310" height="140" rx="5"/>
+            <!-- 잔디 텍스트는 표시 안 함 (배경 구역) -->
+
+            <!-- Roll: x=616, y=126, w=76, h=140 -->
+            <rect class="zone-roll" x="616" y="126" width="76" height="140" rx="5"
+                  onclick="openDept('Roll')" id="zone-Roll"/>
+            <text class="zlabel" x="654" y="196">Roll</text>
+
+            <!-- 연삭1: x=702, y=126, w=95, h=66 -->
+            <rect class="zone-dept" x="702" y="126" width="95" height="66" rx="5"
+                  onclick="openDept('연삭1')" id="zone-연삭1"/>
+            <text class="zlabel" x="749" y="159">연삭1</text>
+
+            <!-- 코팅1: x=807, y=126, w=93, h=66 (연삭1과 10px 간격) -->
+            <rect class="zone-dept" x="807" y="126" width="93" height="66" rx="5"
+                  onclick="openDept('코팅1')" id="zone-코팅1"/>
+            <text class="zlabel" x="853" y="159">코팅1</text>
+
+            <!-- 연삭1/코팅1 아래 빈 회색 (사잇길) - 자연스럽게 배경으로 표현 -->
+
+            <!-- ════════════════════════════
+                 3행 (y=282, h=78)
+                 가공: x=10, w=270, h=78
+            ════════════════════════════ -->
+            <rect class="zone-dept" x="10" y="282" width="270" height="78" rx="5"
+                  onclick="openDept('가공')" id="zone-가공"/>
+            <text class="zlabel" x="145" y="321">가공</text>
+
+
+            <g id="badge-IMC-ENDMILL" style="display:none">
+                <circle class="svg-badge-circle" cx="270" cy="10" r="9"/>
+                <text class="svg-badge-text" x="270" y="10" id="badge-txt-IMC-ENDMILL">0</text>
+            </g>
+            <g id="badge-원료" style="display:none">
+                <circle class="svg-badge-circle" cx="390" cy="10" r="9"/>
+                <text class="svg-badge-text" x="390" y="10" id="badge-txt-원료">0</text>
+            </g>
+            <g id="badge-MC" style="display:none">
+                <circle class="svg-badge-circle" cx="490" cy="10" r="9"/>
+                <text class="svg-badge-text" x="490" y="10" id="badge-txt-MC">0</text>
+            </g>
+            <g id="badge-금형1" style="display:none">
+                <circle class="svg-badge-circle" cx="584" cy="10" r="9"/>
+                <text class="svg-badge-text" x="584" y="10" id="badge-txt-금형1">0</text>
+            </g>
+            <g id="badge-합금1" style="display:none">
+                <circle class="svg-badge-circle" cx="682" cy="10" r="9"/>
+                <text class="svg-badge-text" x="682" y="10" id="badge-txt-합금1">0</text>
+            </g>
+            <g id="badge-드릴" style="display:none">
+                <circle class="svg-badge-circle" cx="798" cy="10" r="9"/>
+                <text class="svg-badge-text" x="798" y="10" id="badge-txt-드릴">0</text>
+            </g>
+            <g id="badge-세라믹" style="display:none">
+                <circle class="svg-badge-circle" cx="896" cy="10" r="9"/>
+                <text class="svg-badge-text" x="896" y="10" id="badge-txt-세라믹">0</text>
+            </g>
+            <g id="badge-코팅2" style="display:none">
+                <circle class="svg-badge-circle" cx="90" cy="126" r="9"/>
+                <text class="svg-badge-text" x="90" y="126" id="badge-txt-코팅2">0</text>
+            </g>
+            <g id="badge-QA" style="display:none">
+                <circle class="svg-badge-circle" cx="90" cy="224" r="9"/>
+                <text class="svg-badge-text" x="90" y="224" id="badge-txt-QA">0</text>
+            </g>
+            <g id="badge-연삭2" style="display:none">
+                <circle class="svg-badge-circle" cx="184" cy="126" r="9"/>
+                <text class="svg-badge-text" x="184" y="126" id="badge-txt-연삭2">0</text>
+            </g>
+            <g id="badge-금형2" style="display:none">
+                <circle class="svg-badge-circle" cx="278" cy="126" r="9"/>
+                <text class="svg-badge-text" x="278" y="126" id="badge-txt-금형2">0</text>
+            </g>
+            <g id="badge-합금2" style="display:none">
+                <circle class="svg-badge-circle" cx="278" cy="193" r="9"/>
+                <text class="svg-badge-text" x="278" y="193" id="badge-txt-합금2">0</text>
+            </g>
+            <g id="badge-Roll" style="display:none">
+                <circle class="svg-badge-circle" cx="690" cy="126" r="9"/>
+                <text class="svg-badge-text" x="690" y="126" id="badge-txt-Roll">0</text>
+            </g>
+            <g id="badge-연삭1" style="display:none">
+                <circle class="svg-badge-circle" cx="793" cy="126" r="9"/>
+                <text class="svg-badge-text" x="793" y="126" id="badge-txt-연삭1">0</text>
+            </g>
+            <g id="badge-코팅1" style="display:none">
+                <circle class="svg-badge-circle" cx="898" cy="126" r="9"/>
+                <text class="svg-badge-text" x="898" y="126" id="badge-txt-코팅1">0</text>
+            </g>
+            <g id="badge-가공" style="display:none">
+                <circle class="svg-badge-circle" cx="276" cy="282" r="9"/>
+                <text class="svg-badge-text" x="276" y="282" id="badge-txt-가공">0</text>
+            </g>
+        </svg>
+    </div>
+</div>
+
+<!-- 부서 3D 뷰 -->
+<div id="view-dept" class="view">
+    <div class="dept-header">
+        <button class="back-btn" onclick="goHome()">← 배치도</button>
+        <h2 id="lbl-dept-name">부서 3D 관제실</h2>
+        <button class="dept-shortage-btn" id="dept-shortage-btn" onclick="openDeptShortageModal()">
+            ⚠️ 청구 필요 자재
+        </button>
+    </div>
+    <div class="map-view-container">
+        <div class="info-banner-3d">
+            🚀 3D 조작 &nbsp;|&nbsp;
+            <span>드래그</span>: 이동 &nbsp;|&nbsp;
+            <span>두 손가락</span>: 회전·줌 &nbsp;|&nbsp;
+            <span class="pc-only">PC: 휠클릭 드래그=회전, 휠=줌</span>
+        </div>
+        <div class="twin-3d-scene" id="3d-scene-stage">
+            <div class="twin-3d-grid" id="dynamic-factory-map"></div>
+        </div>
+    </div>
+</div>
+
+<!-- 스페어파트 팝업 모달 -->
+<div id="view-parts" class="modal-overlay" onclick="closePartsModal(event)">
+    <div class="parts-modal-box" onclick="event.stopPropagation()">
+        <div class="parts-modal-head">
+            <h2 id="lbl-parts-title">장비 부품 대장</h2>
+            <input type="text" id="parts-search" class="parts-search"
+                   placeholder="🔍 부품 키워드 검색..." oninput="filterPartsTable()">
+            <button class="modal-close-x" onclick="closePartsModal(null)">✕</button>
+        </div>
+        <div class="parts-modal-body">
+            <div id="parts-data-zone"></div>
+        </div>
+    </div>
+</div>
+
+<!-- 종합현황 전체화면 뷰 -->
+<div id="view-summary" class="view">
+    <div class="parts-header">
+        <button class="back-btn" onclick="goHome()">← 메인</button>
+        <h2>📋 종합현황 (청구 필요 자재)</h2>
+        <input type="text" id="summary-search" class="parts-search"
+               placeholder="🔍 키워드 검색..." oninput="filterSummaryTable()">
+    </div>
+    <div class="parts-body">
+        <div id="summary-data-zone"></div>
+    </div>
+</div>
+
+<!-- 부서 전용 청구필요자재 모달 -->
+<div id="dept-shortage-modal" class="modal-overlay" onclick="closeDeptShortageModal(event)">
+    <div class="modal-container" onclick="event.stopPropagation()">
+        <div class="modal-header">
+            <h2 id="lbl-dept-shortage-title" style="color:#ef4444;margin:0;font-size:19px;">⚠️ 청구 필요 자재</h2>
+            <span class="modal-close" onclick="closeDeptShortageModal(null)">&times;</span>
+        </div>
+        <input type="text" id="dept-shortage-search" class="search-bar"
+               placeholder="🔍 키워드 검색..." oninput="filterDeptShortageTable()">
+        <div id="dept-shortage-zone"></div>
+    </div>
+</div>
+
+<!-- 기존 모달 (호환성 유지, 숨김) -->
+<div id="popup-modal" style="display:none">
+    <div id="popup-data-table-zone"></div>
+    <input id="modal-search" style="display:none">
+    <span id="lbl-popup-title"></span>
+</div>
+
+
+<script>
+/* ══ 전역 상태 ══ */
+let excelWorkbook = null;
+let globalStockCache  = {};
+let globalShortageList = []; // {sheetName, row, hdr, iStk, stk}
+let globalSearchIndex  = []; // {sheet, itemNo, type, desc, stock, shortage, display}
+let currentSortDirection = {};
+let currentDeptName = '';
+
+let isPanning=false, isRotating=false;
+let prevMouseX=0, prevMouseY=0;
+let currentRx=0, currentRy=0, currentRz=0;
+let currentTx=0, currentTy=0, currentZoom=0.95;
+let orbitAbortController=null;
+let currentViewId='home';
+
+/* ══ Google Sheets 설정 ══ */
+const GSHEET_ID = '1cLHQNoimvt21TefDiISbkB7il3t-FBrus-_Tz78eexk';
+const GSHEET_EXPORT_URL = `https://docs.google.com/spreadsheets/d/${GSHEET_ID}/export?format=xlsx&cachebust=${Date.now()}`;
+
+/* ══ 파일 드래그앤드롭 (수동 업로드 백업용) ══ */
+const dropZone = document.getElementById('drop-zone');
+const fileInput = document.getElementById('file-loader');
+dropZone.addEventListener('click', ()=>fileInput.click());
+dropZone.addEventListener('dragover', e=>e.preventDefault());
+dropZone.addEventListener('drop', e=>{ e.preventDefault(); if(e.dataTransfer.files[0]) processExcel(e.dataTransfer.files[0]); });
+fileInput.addEventListener('change', e=>{ if(e.target.files[0]) processExcel(e.target.files[0]); });
+
+/* ══ 초기화 ══ */
+window.addEventListener('DOMContentLoaded', ()=>{
+    showView('loading', false);
+    showLoading('Google Sheets에서 데이터 불러오는 중...');
+    fetch(GSHEET_EXPORT_URL)
+        .then(r=>{ if(!r.ok) throw new Error('fetch fail'); return r.arrayBuffer(); })
+        .then(buf=>{
+            showLoading('데이터 처리 중...');
+            setTimeout(()=>{
+                excelWorkbook = XLSX.read(new Uint8Array(buf), {type:'array'});
+                buildStockCache();
+                loadLastUpdate();
+                setup3DOrbit();
+                hideLoading();
+                showView('home');
+                document.getElementById('home-top-btn').style.display='inline-block';
+                setTimeout(buildBackgroundData, 400);
+            }, 30);
+        })
+        .catch(()=>{
+            hideLoading();
+            showView('upload', false);
+        });
+    history.replaceState({viewId:'home'}, '', '');
+});
+
+function processExcel(file) {
+    const r = new FileReader();
+    r.onload = e=>{
+        showLoading('파일 읽는 중...');
+        setTimeout(()=>{
+            excelWorkbook = XLSX.read(new Uint8Array(e.target.result), {type:'array'});
+            buildStockCache();
+            loadLastUpdate();
+            setup3DOrbit();
+            hideLoading();
+            showView('home');
+            document.getElementById('home-top-btn').style.display='inline-block';
+            setTimeout(buildBackgroundData, 400);
+        }, 30);
+    };
+    r.readAsArrayBuffer(file);
+}
+
+function buildStockCache() {
+    const s = excelWorkbook.Sheets['RawData'];
+    if(!s) return;
+    XLSX.utils.sheet_to_json(s,{header:1}).forEach((row,i)=>{
+        if(i===0||!row[0]) return;
+        globalStockCache[String(row[0]).trim()] = row[1]??0;
+    });
+}
+
+/* ══ 로딩 ══ */
+function showLoading(msg) {
+    document.getElementById('loading-msg').textContent = msg||'처리 중...';
+    document.getElementById('loading-overlay').classList.add('show');
+}
+function hideLoading() {
+    document.getElementById('loading-overlay').classList.remove('show');
+}
+
+/* ══ Last Update ══ */
+function loadLastUpdate() {
+    if(!excelWorkbook) return;
+    const s = excelWorkbook.Sheets['HOME'];
+    if(!s) return;
+    const cell = s['V28'];
+    if(!cell) return;
+    const val = String(cell.w||cell.v||'').trim();
+    if(!val) return;
+    const el = document.getElementById('last-update-txt');
+    if(el) el.textContent = 'Last Update: '+val;
+}
+
+/* ══ 백그라운드 처리 ══
+   모든 장비 시트를 4개씩 청크로 순회
+   I열(idx=8)=현재재고, J열(idx=9)=안전재고 (고정 + 헤더 탐색 병행)
+*/
+function buildBackgroundData() {
+    if(!excelWorkbook) return;
+    globalShortageList = [];
+    globalSearchIndex  = [];
+    const shortageMap  = {};
+    const SKIP = ['RawData','종합현황','HOME','Sheet1','Robot','전기','공통','Automation list','Automation List','Fanuc robot','Fanuc Robot','FANUC ROBOT'];
+    const sheets = excelWorkbook.SheetNames.filter(n=>
+        !SKIP.some(s=>n.toLowerCase()===s.toLowerCase())
+    );
+    let idx=0;
+
+    function parseOneSheet(sName) {
+        const sheet = excelWorkbook.Sheets[sName];
+        if(!sheet||!sheet['!ref']) return;
+        const matrix = XLSX.utils.sheet_to_json(sheet,{header:1});
+        let hi=-1;
+        // 진짜 헤더 행 = 컬럼 키워드를 '여러 개' 가진 행
+        // (제목 행은 셀 하나에 'Part List' 같은 긴 문장만 있어서 제외됨)
+        for(let i=0;i<Math.min(matrix.length,15);i++){
+            const r=matrix[i];
+            if(!r) continue;
+            const cells = r.map(v=>String(v||'').trim().toLowerCase());
+            let score=0;
+            cells.forEach(c=>{
+                if(c==='type') score++;
+                if(c==='part') score++;
+                if(c==='model') score++;
+                if(c.replace(/ /g,'')==='itemno'||c.replace(/ /g,'')==='itemno.') score++;
+                if(c.includes('description')) score++;
+                if(c==='재고') score++;
+                if(c.replace(/ /g,'')==='safetyqty') score++;
+            });
+            // 키워드 2개 이상이면 진짜 헤더 행
+            if(score>=2){hi=i;break;}
+        }
+        if(hi<0) return;
+        // Kobayashi 디버그
+
+        const hdr = matrix[hi].map(h=>h?String(h).trim():'');
+        const iiNo = hdr.findIndex(h=>{if(!h)return false;const c=h.toLowerCase().replace(/ /g,'').replace(/\.$/,'');return c=='itemno';});
+        const iType= hdr.findIndex(h=>h&&h==='Type');
+        const iDesc= hdr.findIndex(h=>h&&(h.toLowerCase().includes('desc')||h==='Part Name'));
+        // 재고 컬럼: '재고' 또는 '현재 재고' (Safety 글자 없는 순수 재고)
+        let iStk = hdr.findIndex(h=>{if(!h)return false;const t=String(h).trim();const tl=t.toLowerCase();return (t==='재고'||t==='현재 재고'||t==='현재재고'||tl==='stock'||tl==='qty')&&!tl.includes('safety');});
+        // 안전재고 컬럼: 'Safety'(짧은형) 또는 'Safety Qty' 또는 '안전'
+        let iSfy = hdr.findIndex(h=>{if(!h)return false;const t=String(h).trim();const tl=t.toLowerCase().replace(/ /g,'');return tl==='safety'||tl==='safetyqty'||tl==='safetystock'||t==='안전 재고'||t==='안전재고'||t.includes('안전');});
+        // Safety Qty 헤더가 없는 시트는 처리하지 않음
+        if(iSfy<0) return;
+        // 재고 컬럼도 없으면 고정 인덱스 폴백
+        if(iStk<0) iStk=iSfy-1;
+
+        let cnt=0;
+        matrix.slice(hi+1).forEach(row=>{
+            if(!row||!row.join('')) return;
+            const itemNo= iiNo>=0?String(row[iiNo]||'').trim():'';
+            const type  = iType>=0?String(row[iType]||'').trim():'';
+            const desc  = iDesc>=0?String(row[iDesc]||'').trim():'';
+            if(!itemNo&&!type&&!desc) return;
+            // 재고: RawData 캐시 우선 (0도 유효한 값)
+            const stk = (itemNo && itemNo!=='' && globalStockCache[itemNo] !== undefined)
+                ? globalStockCache[itemNo]
+                : (row[iStk] !== undefined ? row[iStk] : 0);
+            // Safety Qty: iSfy 위치가 비어있으면 인접 열(+1, +2)도 탐색
+            // Safety Qty: 해당 열이 비어있으면 +1열만 허용 (병합셀 대응)
+            const sfyRaw = row[iSfy];
+            const sfy=parseFloat(String(sfyRaw||'').replace(/,/g,''));
+            // stk: 0도 유효한 재고값
+            const ns = (stk===0||stk==='0') ? 0 : parseFloat(String(stk||'').replace(/,/g,''));
+            const shortage=!isNaN(ns)&&!isNaN(sfy)&&sfy>0&&ns<sfy;
+            if(sName==='Kobayashi'&&shortage) console.log('[KOB부족]',itemNo,'stk=',stk,'ns=',ns,'sfy=',sfy);
+            if(sName==='Kobayashi'&&itemNo==='950112'){
+                console.log('[KOB950112] 전체row:', JSON.stringify(row));
+                console.log('[KOB950112] iStk=',iStk,'iSfy=',iSfy,'stk=',stk,'sfyRaw=',sfyRaw,'sfy=',sfy,'ns=',ns);
+            }
+
+            globalSearchIndex.push({sheet:sName,itemNo,type,desc,stock:stk,shortage,
+                display:[sName,itemNo,type,desc,...row.slice(0,12).map(v=>String(v||''))].join(' ')});
+            if(shortage){
+                cnt++;
+                globalShortageList.push({sheetName:sName, row, hdr, iStk, stk});
+            }
+        });
+        if(cnt>0) shortageMap[sName]=cnt;
+    }
+
+    function processChunk() {
+        sheets.slice(idx,idx+4).forEach(parseOneSheet);
+        idx+=4;
+        if(idx<sheets.length){ setTimeout(processChunk,10); }
+        else {
+            console.log('[SPL] 완료:',sheets.length,'시트,',globalShortageList.length,'부족항목, shortageMap:', JSON.stringify(shortageMap));
+            updateSVGBadges(shortageMap);
+        }
+    }
+    processChunk();
+}
+
+/* ══ SVG 뱃지 업데이트 ══ */
+const DEPT_BADGE = {
+    'IMC ENDMILL':'IMC-ENDMILL','원료':'원료','MC':'MC','금형1':'금형1',
+    '합금1':'합금1','드릴':'드릴','세라믹':'세라믹','코팅2':'코팅2',
+    'QA':'QA','연삭2':'연삭2','금형2':'금형2','합금2':'합금2',
+    'Roll':'Roll','연삭1':'연삭1','코팅1':'코팅1','가공':'가공'
+};
+
+function updateSVGBadges(shortageMap) {
+    document.querySelectorAll('g[id^="badge-"]').forEach(el=>el.style.display='none');
+    if(!excelWorkbook||!Object.keys(shortageMap).length) return;
+
+    // 각 부서 배치도에서 linkSheet 목록 수집 → 부서별 합산
+    Object.keys(DEPT_BADGE).forEach(deptName=>{
+        const sName = deptName==='M/C'?'MC':deptName;
+        const sheet = excelWorkbook.Sheets[sName];
+        if(!sheet||!sheet['!ref']) return;
+        const range = XLSX.utils.decode_range(sheet['!ref']);
+        const links = new Set();
+        for(let r=0;r<=range.e.r;r++){
+            for(let c=26;c<=Math.min(range.e.c,51);c++){
+                const cell=sheet[XLSX.utils.encode_cell({r,c})];
+                if(!cell||!cell.v) continue;
+                let lk=String(cell.v).trim();
+                if(cell.l&&cell.l.Target){
+                    const raw=String(cell.l.Target);
+                    if(raw.startsWith('#')) lk=raw.substring(1).split('!')[0].replace(/^'|'$/g,'').trim();
+                }
+                links.add(lk);
+            }
+        }
+        // shortageMap 키와 매칭
+        let total=0;
+        links.forEach(lk=>{
+            const lLow=lk.toLowerCase().replace(/\s/g,'');
+            Object.entries(shortageMap).forEach(([src,cnt])=>{
+                const sLow=src.toLowerCase().replace(/\s/g,'');
+                if(lLow===sLow||lLow.includes(sLow)||sLow.includes(lLow)) total+=cnt;
+            });
+        });
+        if(total<=0) return;
+        const bid=DEPT_BADGE[deptName];
+        const grp=document.getElementById('badge-'+bid);
+        const txt=document.getElementById('badge-txt-'+bid);
+        if(grp&&txt){txt.textContent=total>99?'99+':String(total);grp.style.display='';}
+    });
+}
+
+/* ══ 전체 검색 ══ */
+function onGlobalSearch(q) {
+    q=(q||'').trim();
+    const dd=document.getElementById('search-dropdown');
+    if(!q||q.length<2){dd.classList.remove('show');return;}
+    const lower=q.toLowerCase();
+    const results=globalSearchIndex.filter(r=>r.display.toLowerCase().includes(lower)).slice(0,40);
+    if(!results.length){
+        dd.innerHTML='<div class="search-result-empty">검색 결과 없음</div>';
+    } else {
+        dd.innerHTML=results.map(r=>`
+          <div class="search-result-item" onmousedown="openPartsModal('${escapeHtml(r.sheet)}','${escapeHtml(r.sheet)}')">
+            <div class="sri-machine">${escapeHtml(r.sheet)}</div>
+            <div class="sri-part">${escapeHtml(r.itemNo)} &nbsp; ${escapeHtml(r.type)} &nbsp; ${escapeHtml(r.desc)}</div>
+            <div class="sri-sheet">${r.shortage?'<span style="color:#ef4444;font-weight:700;">⚠️ 재고부족</span> &nbsp;·&nbsp; ':''}재고: <strong>${escapeHtml(String(r.stock))}</strong></div>
+          </div>`).join('');
+    }
+    dd.classList.add('show');
+}
+function hideSearchDropdown(){
+    setTimeout(()=>document.getElementById('search-dropdown').classList.remove('show'),150);
+}
+
+/* ══ 테마/네비 ══ */
+function toggleTheme(){
+    const h=document.documentElement;
+    h.setAttribute('data-theme',h.getAttribute('data-theme')==='dark'?'light':'dark');
+    syncBillboard();
+}
+function goHome(){ resetCam(); showView('home'); }
+function showView(id, push=true){
+    currentViewId=id;
+    document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+    document.getElementById('view-'+id).classList.add('active');
+    document.body.classList.toggle('parts-active', id==='summary');
+    if(push) history.pushState({viewId:id},'','');
+}
+window.addEventListener('popstate', e=>{
+    const id=e.state?.viewId||'home';
+    showView(id, false);
+});
+window.addEventListener('resize', ()=>{
+    if(currentViewId==='dept') autoFitZoom();
+});
+function goBackFromParts(){ history.back(); }
+
+/* ══ 3D 궤도 ══ */
+function setup3DOrbit(){
+    if(orbitAbortController) orbitAbortController.abort();
+    orbitAbortController=new AbortController();
+    const {signal}=orbitAbortController;
+    const stage=document.getElementById('3d-scene-stage');
+    const grid=document.getElementById('dynamic-factory-map');
+
+    // 마우스 (PC)
+    stage.addEventListener('mousedown',e=>{
+        if(e.button===1){e.preventDefault();isRotating=true;}
+        else if(e.button===0){isPanning=true;}
+        prevMouseX=e.clientX;prevMouseY=e.clientY;
+    },{signal});
+    window.addEventListener('mousemove',e=>{
+        if(!isPanning&&!isRotating) return;
+        const dx=e.clientX-prevMouseX, dy=e.clientY-prevMouseY;
+        if(isRotating){
+            if(e.shiftKey){currentRy+=dx*0.35;}
+            else{currentRz+=dx*0.35;currentRx-=dy*0.35;}
+            grid.style.setProperty('--rx',currentRx+'deg');
+            grid.style.setProperty('--ry',currentRy+'deg');
+            grid.style.setProperty('--rz',currentRz+'deg');
+        } else {
+            currentTx+=dx*0.85;currentTy+=dy*0.85;
+            grid.style.setProperty('--tx',currentTx+'px');
+            grid.style.setProperty('--ty',currentTy+'px');
+        }
+        prevMouseX=e.clientX;prevMouseY=e.clientY;
+        syncBillboard();
+    },{signal});
+    window.addEventListener('mouseup',()=>{isPanning=false;isRotating=false;},{signal});
+    stage.addEventListener('wheel',e=>{
+        e.preventDefault();
+        currentZoom=Math.min(3,Math.max(0.2,currentZoom+(e.deltaY<0?0.05:-0.05)));
+        grid.style.setProperty('--zoom',currentZoom);
+    },{passive:false,signal});
+
+    // 터치 (모바일)
+    let pinchDist0=null, touchRot=false;
+    function getTouchDist(t1,t2){
+        return Math.hypot(t2.clientX-t1.clientX, t2.clientY-t1.clientY);
+    }
+    stage.addEventListener('touchstart',e=>{
+        e.preventDefault();
+        const ts=e.touches;
+        if(ts.length===1){
+            isPanning=true; isRotating=false; touchRot=false;
+            prevMouseX=ts[0].clientX; prevMouseY=ts[0].clientY;
+        } else if(ts.length===2){
+            isPanning=false;
+            pinchDist0=getTouchDist(ts[0],ts[1]);
+            touchRot=true;
+            prevMouseX=(ts[0].clientX+ts[1].clientX)/2;
+            prevMouseY=(ts[0].clientY+ts[1].clientY)/2;
+        }
+    },{passive:false,signal});
+    stage.addEventListener('touchmove',e=>{
+        e.preventDefault();
+        const ts=e.touches;
+        if(ts.length===1 && isPanning){
+            const dx=ts[0].clientX-prevMouseX, dy=ts[0].clientY-prevMouseY;
+            currentTx+=dx; currentTy+=dy;
+            grid.style.setProperty('--tx',currentTx+'px');
+            grid.style.setProperty('--ty',currentTy+'px');
+            prevMouseX=ts[0].clientX; prevMouseY=ts[0].clientY;
+        } else if(ts.length===2 && touchRot){
+            const d=getTouchDist(ts[0],ts[1]);
+            if(pinchDist0){
+                const ratio=d/pinchDist0;
+                currentZoom=Math.min(3,Math.max(0.2,currentZoom*ratio));
+                grid.style.setProperty('--zoom',currentZoom);
+                pinchDist0=d;
+            }
+            const mx=(ts[0].clientX+ts[1].clientX)/2;
+            const my=(ts[0].clientY+ts[1].clientY)/2;
+            const dx=mx-prevMouseX, dy=my-prevMouseY;
+            currentRz+=dx*0.4; currentRx-=dy*0.4;
+            grid.style.setProperty('--rx',currentRx+'deg');
+            grid.style.setProperty('--rz',currentRz+'deg');
+            prevMouseX=mx; prevMouseY=my;
+        }
+        syncBillboard();
+    },{passive:false,signal});
+    stage.addEventListener('touchend',e=>{
+        if(e.touches.length===0){isPanning=false;touchRot=false;pinchDist0=null;}
+    },{signal});
+}
+function syncBillboard(){
+    document.querySelectorAll('.cube3d-box .top span').forEach(el=>{
+        el.style.transform=`rotateZ(calc(-1 * var(--rz))) rotateY(calc(-1 * var(--ry))) rotateX(calc(-1 * var(--rx)))`;
+    });
+}
+function resetCam(){
+    currentRx=currentRy=currentRz=currentTx=currentTy=0;currentZoom=0.95;
+    const g=document.getElementById('dynamic-factory-map');
+    if(!g) return;
+    ['--rx','--ry','--rz'].forEach(p=>g.style.setProperty(p,'0deg'));
+    ['--tx','--ty'].forEach(p=>g.style.setProperty(p,'0px'));
+    g.style.setProperty('--zoom','0.95');
+}
+function autoFitZoom(){
+    const stage=document.getElementById('3d-scene-stage');
+    const grid =document.getElementById('dynamic-factory-map');
+    if(!stage||!grid) return;
+    const availW=stage.clientWidth -80;
+    const availH=stage.clientHeight-80;
+    const gridW =grid.scrollWidth;
+    const gridH =grid.scrollHeight;
+    if(!gridW||!gridH||availW<=0||availH<=0) return;
+    const fit=Math.min(availW/gridW, availH/gridH);
+    currentZoom=Math.max(0.15, Math.min(fit*0.88, 1.5));
+    grid.style.setProperty('--zoom', currentZoom);
+}
+
+/* ══ 유틸 ══ */
+function escapeHtml(s){
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+        .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+function getDynamicCubeColors(name){
+    let raw=String(name).trim().toUpperCase();
+    const xsMatch=raw.match(/^(6[012]\d)XS/);
+    if(xsMatch){
+        const h={'628':30,'620':195,'629':140}[xsMatch[1]]??200;
+        return{top:`hsla(${h},80%,62%,0.50)`,front:`hsla(${h},70%,48%,0.58)`,left:`hsla(${h},65%,40%,0.58)`};
+    }
+    let p=raw.split(/[#\d\s\-]/)[0]||raw;
+    const map={OKANO:160,COMBI:135,CENTRO:195,QUATTRO:95,AP460:280,GIG:20,APX:220,NICOLIS:320,FUJI:50,ANCA:260,PUMA:340};
+    const f=Object.keys(map).find(k=>p.includes(k));
+    let hue=0;
+    if(f){hue=map[f];}else{let h=0;for(let i=0;i<p.length;i++)h=p.charCodeAt(i)+((h<<5)-h);hue=Math.abs(h)%360;}
+    return{top:`hsla(${hue},85%,60%,0.45)`,front:`hsla(${hue},75%,45%,0.55)`,left:`hsla(${hue},70%,40%,0.55)`};
+}
+
+/* ══ 시트명 탐색 ══ */
+function findSheet(key){
+    if(!excelWorkbook||!key) return null;
+    const names=excelWorkbook.SheetNames;
+    const clean=s=>String(s).trim().toLowerCase().replace(/[\s#]/g,'');
+    // 1. 완전일치
+    let r=names.find(n=>n===key); if(r) return r;
+    // 2. 정규화 일치
+    r=names.find(n=>clean(n)===clean(key)); if(r) return r;
+    // 3. 포함
+    r=names.find(n=>clean(n).includes(clean(key))||clean(key).includes(clean(n))); if(r) return r;
+    return null;
+}
+
+/* ══ 부서 열기 ══ */
+function openDept(deptName){
+    resetCam();
+    currentDeptName=deptName;
+    const sName=deptName==='M/C'?'MC':deptName;
+    document.getElementById('lbl-dept-name').innerText=`🛸 ${deptName} – 3D 장비 배치도`;
+    const sheet=excelWorkbook.Sheets[sName];
+    if(!sheet||!sheet['!ref']){alert(`[${sName}] 시트를 찾지 못했습니다.`);return;}
+    render3DMap(sheet,26);
+    showView('dept');
+    setTimeout(()=>{syncBillboard();markShortageCubes();updateDeptShortageBtn();autoFitZoom();},80);
+}
+
+/* ══ 3D 맵 렌더링 ══ */
+function render3DMap(sheet, mapStartCol){
+    const mapZone=document.getElementById('dynamic-factory-map');
+    mapZone.innerHTML='';
+    const range=XLSX.utils.decode_range(sheet['!ref']);
+    const maxR=range.e.r, maxC=Math.min(range.e.c,51);
+    if(mapStartCol>maxC){mapZone.innerHTML='<p style="color:#64748b;text-align:center;padding:20px;">배치 데이터 없음</p>';return;}
+    const DEF=8.43, NARROW=2.5;
+    const cw={};
+    if(sheet['!cols']) sheet['!cols'].forEach((c,i)=>{cw[i]=c?.wch??DEF;});
+    const wch=c=>cw[c]??DEF;
+    const isTunnel=c=>wch(c)<NARROW;
+    const usedCols=[];
+    for(let c=mapStartCol;c<=maxC;c++) if(!isTunnel(c)) usedCols.push(c);
+    if(!usedCols.length) return;
+
+    const grid={};
+    for(let r=0;r<=maxR;r++){grid[r]={};for(let c=mapStartCol;c<=maxC;c++) grid[r][c]={cell:sheet[XLSX.utils.encode_cell({r,c})],isMerged:false,rowspan:1,colspan:1,text:''};}
+    if(sheet['!merges']){
+        sheet['!merges'].forEach(m=>{
+            if(m.e.c<mapStartCol||m.s.c>maxC||m.s.r>maxR) return;
+            const sR=Math.max(m.s.r,0),eR=Math.min(m.e.r,maxR);
+            const sC=Math.max(m.s.c,mapStartCol),eC=Math.min(m.e.c,maxC);
+            const oc=sheet[XLSX.utils.encode_cell({r:m.s.r,c:m.s.c})];
+            const txt=oc?String(oc.v??'').trim():'';
+            if(grid[sR]?.[sC]){grid[sR][sC].rowspan=eR-sR+1;grid[sR][sC].colspan=eC-sC+1;grid[sR][sC].text=txt;}
+            for(let r=sR;r<=eR;r++) for(let c=sC;c<=eC;c++){if(r===sR&&c===sC)continue;if(grid[r]?.[c])grid[r][c].isMerged=true;}
+        });
+    }
+    const usedRows=[];
+    for(let r=0;r<=maxR;r++){let has=false;for(const c of usedCols)if(grid[r]?.[c]?.cell?.v||grid[r]?.[c]?.text){has=true;break;}if(has)usedRows.push(r);}
+    if(!usedRows.length) return;
+
+    const COL_SCALE=10,COL_MIN=72,ROW_H=52;
+    const colPx={};
+    usedCols.forEach(c=>{colPx[c]=Math.max(COL_MIN,wch(c)*COL_SCALE);});
+    mapZone.style.gridTemplateColumns=usedCols.map(c=>colPx[c]+'px').join(' ');
+    mapZone.style.gap='8px'; mapZone.style.gridAutoFlow='row';
+
+    const calcSpan=(sC,raw)=>{let s=0;for(let ci=sC;ci<sC+raw&&ci<=maxC;ci++)if(!isTunnel(ci))s++;return Math.max(1,s);};
+
+    const ROOM_KW=['Press','Sinter','Sand','합금','금형','연삭','코팅','가공','구역','M/C','Robot','QA','IMC'];
+    const isRoomHeader=val=>ROOM_KW.some(k=>{
+        if(val===k) return true;
+        if(val.startsWith(k)&&/^[\s\d_\-\/]*$/.test(val.slice(k.length))) return true;
+        return false;
+    });
+    const HPAL=[
+        {bg:'rgba(219,234,254,0.7)',border:'#93c5fd',txt:'#1d4ed8'},
+        {bg:'rgba(254,215,170,0.7)',border:'#fdba74',txt:'#c2410c'},
+        {bg:'rgba(187,247,208,0.7)',border:'#86efac',txt:'#15803d'},
+        {bg:'rgba(233,213,255,0.7)',border:'#d8b4fe',txt:'#7e22ce'},
+        {bg:'rgba(207,250,254,0.7)',border:'#67e8f9',txt:'#0e7490'},
+        {bg:'rgba(254,249,195,0.7)',border:'#fcd34d',txt:'#b45309'},
+        {bg:'rgba(254,202,202,0.7)',border:'#fca5a5',txt:'#b91c1c'},
+        {bg:'rgba(209,250,229,0.7)',border:'#6ee7b7',txt:'#065f46'},
+    ];
+    let palIdx=0;
+    const headerRowPal={};
+    for(const r of usedRows){
+        for(const c of usedCols){
+            const gc=grid[r]?.[c];if(!gc||gc.isMerged)continue;
+            const val=gc.text||(gc.cell?String(gc.cell.v??'').trim():'');
+            if(val&&isRoomHeader(val)){if(!(r in headerRowPal))headerRowPal[r]=HPAL[palIdx++%HPAL.length];break;}
+        }
+    }
+
+    const frags=[];
+    for(const r of usedRows){
+        const isHRow=r in headerRowPal;
+        for(const c of usedCols){
+            const gc=grid[r]?.[c];if(!gc||gc.isMerged)continue;
+            const cs=calcSpan(c,gc.colspan);
+            let rs=0;for(let ri=r;ri<r+gc.rowspan&&ri<=maxR;ri++)if(usedRows.includes(ri))rs++;if(rs<1)rs=1;
+            const spanSt=`grid-column:span ${cs};grid-row:span ${rs};height:${rs*ROW_H}px;`;
+            const val=gc.text||(gc.cell?String(gc.cell.v??'').trim():'');
+            if(!val){frags.push(`<div style="${spanSt}background:transparent;"></div>`);continue;}
+            if(isRoomHeader(val)&&isHRow){
+                const p=headerRowPal[r];
+                frags.push(`<div style="${spanSt}display:flex;align-items:center;justify-content:center;background:${p.bg};border:2px solid ${p.border};border-radius:8px;box-sizing:border-box;"><span style="font-size:13px;font-weight:900;letter-spacing:2px;color:${p.txt};text-transform:uppercase;">${escapeHtml(val)}</span></div>`);
+                continue;
+            }
+            // 링크 타겟 추출
+            let linkSheet=val;
+            if(gc.cell?.l?.Target){const raw=String(gc.cell.l.Target);if(raw.startsWith('#'))linkSheet=raw.substring(1).split('!')[0].replace(/^'|'$/g,'').trim();}
+            const t=getDynamicCubeColors(val);
+            frags.push(`<div class="cube3d-container" data-clickable="true" data-val="${escapeHtml(val)}" data-sheet="${escapeHtml(linkSheet)}" style="${spanSt}--top-color:${t.top};--front-color:${t.front};--left-color:${t.left};"><div class="cube3d-box"><div class="face top" style="background:var(--top-color);"><span>${escapeHtml(val)}</span></div><div class="face front"></div><div class="face back"></div><div class="face left"></div><div class="face right"></div></div></div>`);
+        }
+    }
+    mapZone.innerHTML=frags.join('');
+    if(mapZone._cubeClickHandler) mapZone.removeEventListener('click', mapZone._cubeClickHandler);
+    mapZone._cubeClickHandler = e=>{
+        const cube=e.target.closest('.cube3d-container[data-clickable="true"]');
+        if(cube) openPartsModal(cube.getAttribute('data-val'), cube.getAttribute('data-sheet'));
+    };
+    mapZone.addEventListener('click', mapZone._cubeClickHandler);
+}
+
+/* ══ 재고부족 큐브 강조 ══ */
+function markShortageCubes(){
+    if(!globalShortageList.length) return;
+    const shortageSheets=new Set(globalShortageList.map(i=>i.sheetName.toLowerCase().replace(/\s/g,'')));
+    document.querySelectorAll('.cube3d-container[data-sheet]').forEach(cube=>{
+        const sh=cube.getAttribute('data-sheet').toLowerCase().replace(/\s/g,'');
+        cube.classList.toggle('cube-shortage', shortageSheets.has(sh));
+    });
+}
+
+/* ══ 부서 청구필요자재 버튼 ══ */
+function updateDeptShortageBtn(){
+    const btn=document.getElementById('dept-shortage-btn');
+    if(!btn) return;
+    // 현재 배치도 큐브 data-sheet 수집
+    const linkedSheets=new Set();
+    document.querySelectorAll('#dynamic-factory-map .cube3d-container[data-sheet]').forEach(cube=>{
+        const sh=cube.getAttribute('data-sheet'); if(sh) linkedSheets.add(sh.trim());
+    });
+    // globalShortageList에서 linkedSheets 매칭
+    const count=globalShortageList.filter(item=>{
+        const sLow=item.sheetName.toLowerCase().replace(/\s/g,'');
+        return [...linkedSheets].some(sh=>{ const lLow=sh.toLowerCase().replace(/\s/g,''); return lLow===sLow||lLow.includes(sLow)||sLow.includes(lLow); });
+    }).length;
+
+    if(count>0){
+        btn.textContent=`⚠️ 청구 필요 자재 (${count}건)`;
+        btn.style.cssText='padding:6px 16px;border-radius:8px;font-size:13px;font-weight:bold;cursor:pointer;border:1.5px solid #f5c6cb;background:#f8d7da;color:#721c24;margin-left:auto;';
+        btn.classList.add('has-shortage');
+    } else {
+        btn.textContent='✅ 청구 필요 자재 없음';
+        btn.style.cssText='padding:6px 16px;border-radius:8px;font-size:13px;font-weight:bold;cursor:pointer;border:1.5px solid #86efac;background:#f0fdf4;color:#15803d;margin-left:auto;';
+        btn.classList.remove('has-shortage');
+    }
+}
+
+/* ══ 메인 청구필요자재 (전체) ══ */
+function openSummaryModal(){
+    if(!excelWorkbook) return;
+    document.getElementById('summary-search').value='';
+    currentSortDirection={};
+    const zone=document.getElementById('summary-data-zone');
+
+    if(!globalShortageList.length){
+        zone.innerHTML=`<div style="padding:40px;text-align:center;color:#15803d;font-size:15px;font-weight:bold;">✅ 청구 필요 자재가 없습니다.<br><span style="font-size:12px;color:var(--text-muted);margin-top:8px;display:block;">백그라운드 로딩 중이면 잠시 후 다시 시도해주세요.</span></div>`;
+        showView('summary');
+        return;
+    }
+
+    // 헤더: 출처 시트 + 첫 항목의 헤더
+    const firstHdr=globalShortageList[0].hdr;
+    const hideIdx=firstHdr.reduce((a,h,i)=>{const c=(h||'').toLowerCase().replace(/ /g,'');if(c==='vendor'||c==='벤더'||c.includes('사진')||c==='k')a.push(i);return a;},[]);
+    const visMap=[];
+    firstHdr.forEach((h,i)=>{if(!hideIdx.includes(i)) visMap.push(i);});
+
+    let html=`<table class="summary-table"><thead><tr>`;
+    html+=`<th style="text-align:left;padding-left:20px">출처 시트</th>`;
+    visMap.forEach((ci,vi)=>{
+        const h=firstHdr[ci]||'';
+        const left=['desc','part','model','type'].some(k=>h.toLowerCase().replace(/ /g,'').includes(k));
+        html+=`<th style="text-align:${left?'left;padding-left:20px':'center'}" onclick="executeSummarySort(${vi+1})">${escapeHtml(h)}</th>`;
+    });
+    html+=`</tr></thead><tbody>`;
+
+    globalShortageList.forEach(({sheetName,row,hdr,iStk,stk})=>{
+        html+=`<tr class="danger-row" data-clickable="true" data-sheet="${escapeHtml(sheetName)}">`;
+        html+=`<td style="text-align:left;padding-left:20px;font-weight:700;color:var(--accent-glow);">${escapeHtml(sheetName)}</td>`;
+        visMap.forEach(ci=>{
+            const h=hdr[ci]||firstHdr[ci]||'';
+            const left=['desc','part','model','type'].some(k=>h.toLowerCase().replace(/ /g,'').includes(k));
+            const v=ci===iStk?stk:(row[ci]!==undefined?row[ci]:'');
+            html+=`<td style="text-align:${left?'left;padding-left:20px':'center'}">${escapeHtml(String(v))}</td>`;
+        });
+        html+=`</tr>`;
+    });
+    html+=`</tbody></table>`;
+    zone.innerHTML=html;
+
+    document.querySelectorAll('#summary-data-zone tr[data-clickable="true"]').forEach(row=>{
+        row.addEventListener('click',()=>{
+            const sh=row.getAttribute('data-sheet');
+            if(sh) openPartsModal(sh,sh);
+        });
+    });
+    showView('summary');
+}
+
+/* ══ 부서 청구필요자재 팝업 ══ */
+function openDeptShortageModal(){
+    if(!excelWorkbook||!currentDeptName) return;
+    document.getElementById('lbl-dept-shortage-title').innerText=`⚠️ ${currentDeptName} – 청구 필요 자재`;
+    document.getElementById('dept-shortage-search').value='';
+    const zone=document.getElementById('dept-shortage-zone');
+
+    // 현재 배치도 큐브 data-sheet 수집
+    const linkedSheets=new Set();
+    document.querySelectorAll('#dynamic-factory-map .cube3d-container[data-sheet]').forEach(cube=>{
+        const sh=cube.getAttribute('data-sheet'); if(sh) linkedSheets.add(sh.trim());
+    });
+
+    // globalShortageList 필터
+    const rows=globalShortageList.filter(item=>{
+        const sLow=item.sheetName.toLowerCase().replace(/\s/g,'');
+        return [...linkedSheets].some(sh=>{ const lLow=sh.toLowerCase().replace(/\s/g,''); return lLow===sLow||lLow.includes(sLow)||sLow.includes(lLow); });
+    });
+
+    if(!rows.length){
+        zone.innerHTML=`<div style="padding:40px;text-align:center;color:#15803d;font-size:16px;font-weight:bold;">✅ 청구 필요 자재가 없습니다.</div>`;
+        document.getElementById('dept-shortage-modal').style.display='flex';
+        return;
+    }
+
+    const firstHdr=rows[0].hdr;
+    const hideIdx=firstHdr.reduce((a,h,i)=>{const c=(h||'').toLowerCase().replace(/ /g,'');if(c==='vendor'||c==='벤더'||c.includes('사진')||c==='k')a.push(i);return a;},[]);
+    const visMap=[];
+    firstHdr.forEach((h,i)=>{if(!hideIdx.includes(i)) visMap.push(i);});
+
+    let html=`<table class="part-table"><thead><tr>`;
+    html+=`<th style="text-align:left;padding-left:20px">장비</th>`;
+    visMap.forEach((ci,vi)=>{
+        const h=firstHdr[ci]||'';
+        const left=['desc','part','model','type'].some(k=>h.toLowerCase().replace(/ /g,'').includes(k));
+        html+=`<th style="text-align:${left?'left;padding-left:20px':'center'}" onclick="executeDeptShortageSort(${vi+1})">${escapeHtml(h)}</th>`;
+    });
+    html+=`</tr></thead><tbody>`;
+
+    rows.forEach(({sheetName,row,hdr,iStk,stk})=>{
+        html+=`<tr class="danger-row">`;
+        html+=`<td style="text-align:left;padding-left:20px;font-weight:700;color:var(--accent-glow);">${escapeHtml(sheetName)}</td>`;
+        visMap.forEach(ci=>{
+            const h=hdr[ci]||firstHdr[ci]||'';
+            const left=['desc','part','model','type'].some(k=>h.toLowerCase().replace(/ /g,'').includes(k));
+            const v=ci===iStk?stk:(row[ci]!==undefined?row[ci]:'');
+            html+=`<td style="text-align:${left?'left;padding-left:20px':'center'}">${escapeHtml(String(v))}</td>`;
+        });
+        html+=`</tr>`;
+    });
+    html+=`</tbody></table>`;
+    zone.innerHTML=html;
+    document.getElementById('dept-shortage-modal').style.display='flex';
+}
+function closeDeptShortageModal(e){ document.getElementById('dept-shortage-modal').style.display='none'; }
+function filterDeptShortageTable(){
+    const q=document.getElementById('dept-shortage-search').value.toLowerCase().trim();
+    document.querySelectorAll('#dept-shortage-zone tbody tr').forEach(r=>{r.style.display=r.innerText.toLowerCase().includes(q)?'':'none';});
+}
+let deptShortageSortDir={};
+function executeDeptShortageSort(ci){
+    const tbl=document.querySelector('#dept-shortage-zone .part-table');if(!tbl)return;
+    const tbody=tbl.querySelector('tbody');
+    const dir=deptShortageSortDir[ci]==='desc'?'asc':'desc'; deptShortageSortDir[ci]=dir;
+    const rows=Array.from(tbody.querySelectorAll('tr'));
+    rows.sort((a,b)=>{const ca=a.cells[ci]?.innerText.trim()??'',cb=b.cells[ci]?.innerText.trim()??'';const na=parseFloat(ca.replace(/,/g,'')),nb=parseFloat(cb.replace(/,/g,''));if(!isNaN(na)&&!isNaN(nb))return dir==='asc'?na-nb:nb-na;return dir==='asc'?ca.localeCompare(cb,'ko'):cb.localeCompare(ca,'ko');});
+    rows.forEach(r=>tbody.appendChild(r));
+    tbl.querySelectorAll('th').forEach((th,i)=>{th.innerText=th.innerText.replace(/ [↑↓]$/g,'');if(i===ci)th.innerText+=dir==='asc'?' ↑':' ↓';});
+}
+
+/* ══ 스페어파트 팝업 ══ */
+function openPartsModal(displayKey, targetSheetName){
+    document.getElementById('parts-search').value='';
+    currentSortDirection={};
+    const actualSheet=findSheet(targetSheetName||displayKey)||(targetSheetName?findSheet(displayKey):null);
+    const zone=document.getElementById('parts-data-zone');
+    document.getElementById('lbl-parts-title').innerText=`⚙️ 장비 [ ${displayKey} ] 스페어파트 내역`;
+
+    if(!actualSheet){
+        zone.innerHTML=`<div style="padding:40px;text-align:center;color:#ef4444;font-weight:bold;">연동 오류: [${escapeHtml(targetSheetName||displayKey)}] 시트 없음</div>`;
+        showView('parts'); return;
+    }
+    const sheet=excelWorkbook.Sheets[actualSheet];
+    const matrix=XLSX.utils.sheet_to_json(sheet,{header:1});
+    if(!matrix.length){zone.innerHTML=`<p style="text-align:center;color:#888;padding:30px;">데이터 없음</p>`;showView('parts');return;}
+
+    let hi=0;
+    for(let i=0;i<Math.min(matrix.length,15);i++){
+        const r=matrix[i];if(!r)continue;
+        const cells=r.map(v=>String(v||'').trim().toLowerCase());
+        let score=0;
+        cells.forEach(c=>{
+            if(c==='type')score++;if(c==='part')score++;if(c==='model')score++;
+            if(c.replace(/ /g,'').replace(/\.$/,'')==='itemno')score++;
+            if(c.includes('description'))score++;if(c==='재고')score++;
+            if(c.replace(/ /g,'')==='safetyqty')score++;
+        });
+        if(score>=2){hi=i;break;}
+    }
+    const headers=matrix[hi].map(h=>h?String(h).trim():'');
+    const dataRows=matrix.slice(hi+1);
+    const iiNo=headers.findIndex(h=>{if(!h)return false;const c=h.toLowerCase().replace(/ /g,'').replace(/\.$/,'');return c=='itemno';});
+    let iStk=headers.findIndex(h=>{if(!h)return false;const t=String(h).trim();const tl=t.toLowerCase();return (t==='재고'||t==='현재 재고'||t==='현재재고'||tl==='stock'||tl==='qty')&&!tl.includes('safety');});
+    let iSfy=headers.findIndex(h=>{if(!h)return false;const t=String(h).trim();const tl=t.toLowerCase().replace(/ /g,'');return tl==='safety'||tl==='safetyqty'||tl==='safetystock'||t==='안전 재고'||t==='안전재고'||t.includes('안전');});
+    if(iStk>=0&&iSfy<0) iSfy=iStk+1;
+    if(iStk<0) iStk=6;
+    if(iSfy<0) iSfy=iStk+1;
+
+    const hideIdx=headers.reduce((a,h,i)=>{const c=(h||'').toLowerCase().replace(/ /g,'');if(c==='vendor'||c==='벤더'||c.includes('사진')||c==='k')a.push(i);return a;},[]);
+    const visMap=[];
+    headers.forEach((h,i)=>{if(!hideIdx.includes(i))visMap.push(i);});
+
+    let html=`<table class="part-table"><thead><tr>`;
+    visMap.forEach((origIdx,visIdx)=>{
+        const h=headers[origIdx];
+        const left=['part','model','description','type'].some(k=>h.toLowerCase().replace(/ /g,'').includes(k));
+        html+=`<th style="text-align:${left?'left;padding-left:20px':'center'}" onclick="executeTableSort(${visIdx})">${escapeHtml(h)}</th>`;
+    });
+    html+=`</tr></thead><tbody>`;
+    let count=0;
+    dataRows.forEach(row=>{
+        if(!row?.length||!row.join(''))return;
+        if(row.join('').includes('Part List'))return;
+        const cv=row.map((v,i)=>hideIdx.includes(i)?'':(v!==undefined?String(v).trim():''));
+        if(!cv.some(v=>v!==''&&v!=='0'&&v!=='None'))return;
+        count++;
+        const itemNo=iiNo>=0?String(row[iiNo]||'').trim():null;
+        const stk = (itemNo && itemNo!=='' && globalStockCache[itemNo] !== undefined)
+                ? globalStockCache[itemNo]
+                : (row[iStk] !== undefined ? row[iStk] : 0);
+        const sfyRaw2=row[iSfy];
+        let sq=parseFloat(String(sfyRaw2||'').replace(/,/g,''));if(isNaN(sq))sq=0;
+        let cls='';
+        if(stk==='None')cls='none-row';
+        else{const ns=parseFloat(String(stk).replace(/,/g,''));if(!isNaN(ns)&&sq>0&&ns<sq)cls='danger-row';}
+        const rawAttrs=visMap.map((origIdx,visIdx)=>{const raw=origIdx===iStk?stk:(row[origIdx]!==undefined?row[origIdx]:'');return `data-raw-${visIdx}="${escapeHtml(String(raw))}"`;}).join(' ');
+        html+=`<tr class="${cls}" ${rawAttrs}>`;
+        visMap.forEach(origIdx=>{
+            const h=headers[origIdx];
+            const left=['part','model','description','type'].some(k=>h.toLowerCase().replace(/ /g,'').includes(k));
+            const v=origIdx===iStk?stk:(row[origIdx]!==undefined?row[origIdx]:'');
+            html+=`<td style="text-align:${left?'left;padding-left:20px':'center'}">${escapeHtml(String(v))}</td>`;
+        });
+        html+=`</tr>`;
+    });
+    zone.innerHTML=count?html+`</tbody></table>`:`<p style="text-align:center;color:#888;padding:30px;">부품 내역 없음</p>`;
+    document.getElementById('view-parts').style.display='flex';
+}
+
+/* ══ 정렬/필터 ══ */
+function _sortTable(sel,colIdx,key){
+    const tbl=document.querySelector(sel);if(!tbl)return;
+    const tbody=tbl.querySelector('tbody');
+    const dir=currentSortDirection[key]==='desc'?'asc':'desc'; currentSortDirection[key]=dir;
+    const rows=Array.from(tbody.querySelectorAll('tr')).filter(r=>r.querySelector('td'));
+    rows.sort((a,b)=>{
+        const ra=a.getAttribute(`data-raw-${colIdx}`)??a.cells[colIdx]?.innerText.trim()??'';
+        const rb=b.getAttribute(`data-raw-${colIdx}`)??b.cells[colIdx]?.innerText.trim()??'';
+        const na=parseFloat(String(ra).replace(/,/g,'')),nb=parseFloat(String(rb).replace(/,/g,''));
+        if(!isNaN(na)&&!isNaN(nb))return dir==='asc'?na-nb:nb-na;
+        return dir==='asc'?String(ra).localeCompare(String(rb),'ko'):String(rb).localeCompare(String(ra),'ko');
+    });
+    rows.forEach(r=>tbody.appendChild(r));
+    tbl.querySelectorAll('th').forEach((th,i)=>{th.innerText=th.innerText.replace(/ [↑↓]$/g,'');if(i===colIdx)th.innerText+=dir==='asc'?' ↑':' ↓';});
+}
+function executeTableSort(ci){_sortTable('.part-table',ci,ci);}
+function executeSummarySort(ci){_sortTable('.summary-table',ci,'s_'+ci);}
+function filterPartsTable(){
+    const q=document.getElementById('parts-search').value.toLowerCase().trim();
+    document.querySelectorAll('#parts-data-zone tbody tr').forEach(r=>{r.style.display=r.innerText.toLowerCase().includes(q)?'':'none';});
+}
+function filterSummaryTable(){
+    const q=document.getElementById('summary-search').value.toLowerCase().trim();
+    document.querySelectorAll('#summary-data-zone tbody tr').forEach(r=>{r.style.display=r.innerText.toLowerCase().includes(q)?'':'none';});
+}
+function filterModalTable(){ filterPartsTable(); }
+function closePartsModal(e){ document.getElementById('view-parts').style.display='none'; }
+function goBackFromParts(){ closePartsModal(null); }
+
+
+</script>
+
+
+
+</body>
+</html>
